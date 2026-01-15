@@ -205,8 +205,7 @@ class ParallelFileUploadController extends AbstractController
                     'processing_time_ms' => $processingTime,
                     'total_rows' => $result['total_rows'] ?? $result['pagination']['total_rows'] ?? 0,
                     'memory_usage_mb' => round(memory_get_peak_usage(true) / 1024 / 1024, 2),
-                    'rows_per_second' => $result['total_rows'] > 0 ? round($result['total_rows'] / ($processingTime / 1000), 2) : 
-                                       ($result['pagination']['total_rows'] ?? 0) > 0 ? round(($result['pagination']['total_rows'] ?? 0) / ($processingTime / 1000), 2) : 0,
+                    'rows_per_second' => $result['total_rows'] > 0 ? round($result['total_rows'] / ($processingTime / 1000), 2) : (($result['pagination']['total_rows'] ?? 0) > 0 ? round(($result['pagination']['total_rows'] ?? 0) / ($processingTime / 1000), 2) : 0),
                     'session_id' => $result['session_id'] ?? null
                 ];
                 
