@@ -3,12 +3,12 @@
 namespace App\Service;
 
 use Symfony\Component\Cache\Adapter\FilesystemAdapter;
-use Symfony\Component\Cache\CacheItemPoolInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 class PaginatedUploadCacheService
 {
-    private CacheItemPoolInterface $cache;
+    private Psr\Cache\CacheItemPoolInterface $cache;
     private ParallelOdsProcessorService $processor;
     private int $pageSize;
 
@@ -36,11 +36,12 @@ class PaginatedUploadCacheService
             }
 
             // Armazenar dados completos em cache
-            $data = $result['data'] ?? [];
+            $data = isset($result['data']) ? $result['data'] : [];
+            $totalRows = isset($result['total_rows']) ? $result['total_rows'] : count($data);
             $cacheData = [
                 'session_id' => $sessionId,
-                'total_rows' => $result['total_rows'] ?? 0,
-                'total_pages' => ceil(($result['total_rows'] ?? 0) / $this->pageSize),
+                'total_rows' => $totalRows,
+                'total_pages' => ceil($totalRows / $this->pageSize),
                 'page_size' => $this->pageSize,
                 'data' => $data,
                 'headers' => $this->extractHeaders($data),
