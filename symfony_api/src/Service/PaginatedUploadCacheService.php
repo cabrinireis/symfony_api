@@ -3,18 +3,20 @@
 namespace App\Service;
 
 use Symfony\Component\Cache\Adapter\FilesystemAdapter;
-use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
+use Psr\Cache\CacheItemPoolInterface;
 
 class PaginatedUploadCacheService
 {
-    private Psr\Cache\CacheItemPoolInterface $cache;
+    private CacheItemPoolInterface $cache;
     private ParallelOdsProcessorService $processor;
     private int $pageSize;
 
     public function __construct(ParallelOdsProcessorService $processor, int $pageSize = 100)
     {
-        $this->cache = new FilesystemAdapter('upload_cache', 3600, $_ENV['APP_VAR_DIR'] ?? '/var/cache');
+        // Usar diretório de cache do Symfony
+        $cacheDir = $_ENV['APP_VAR_DIR'] ?? '/var/www/symfony_api/var/cache';
+        $this->cache = new FilesystemAdapter('upload_cache', 3600, $cacheDir);
         $this->processor = $processor;
         $this->pageSize = $pageSize;
     }
@@ -101,6 +103,14 @@ class PaginatedUploadCacheService
         }
         
         $cachedData = $cacheItem->get();
+        
+        // Verificar se a chave 'data' existe no cache
+        if (!isset($cachedData['data'])) {
+            return [
+                'success' => false,
+                'error' => 'Dados não encontrados no cache'
+            ];
+        }
 
         $totalPages = $cachedData['total_pages'];
         

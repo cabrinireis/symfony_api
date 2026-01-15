@@ -40,7 +40,6 @@ class ParallelOdsProcessorService
             $startTime = microtime(true);
             
             try {
-                // Carregar planilha com configurações otimizadas
                 $reader = $this->createOptimizedReader();
                 $spreadsheet = $reader->load($file->getPathname());
                 
@@ -54,7 +53,6 @@ class ParallelOdsProcessorService
                 $headerRow = $this->findHeaderRow($worksheet, $highestRow);
                 $headers = $this->extractHeaders($worksheet, $headerRow, $worksheet->getHighestColumn());
                 
-                // Calcular chunks para processamento paralelo
                 $totalDataRows = $highestRow - $headerRow;
                 $chunkSize = max(100, ceil($totalDataRows / $this->maxWorkers));
                 $chunks = [];
@@ -69,21 +67,13 @@ class ParallelOdsProcessorService
                     ];
                 }
 
-                // Iniciar resposta JSON
                 echo '{"success": true, "data": [';
                 
                 $firstRow = true;
                 $processedRows = 0;
                 
-                // Processar chunks em paralelo usando forks
-                if (extension_loaded('pcntl') && count($chunks) > 1) {
-                    $results = $this->processChunksInParallel($chunks);
-                } else {
-                    // Fallback para processamento sequencial otimizado
-                    $results = $this->processChunksSequentially($chunks);
-                }
+                $results = $this->processChunksSequentially($chunks);
                 
-                // Enviar resultados em streaming
                 foreach ($results as $chunkResult) {
                     foreach ($chunkResult as $row) {
                         if (!$firstRow) {
@@ -93,7 +83,6 @@ class ParallelOdsProcessorService
                         $firstRow = false;
                         $processedRows++;
                         
-                        // Flush a cada 50 linhas
                         if ($processedRows % 50 === 0) {
                             ob_flush();
                             flush();
@@ -113,45 +102,6 @@ class ParallelOdsProcessorService
                 echo '], "success": false, "error": "' . addslashes($e->getMessage()) . '"}';
             }
         });
-    }
-
-    /**
-     * Processa chunks em paralelo usando PCNTL
-     */
-    private function processChunksInParallel(array $chunks): array
-    {
-        $workers = min(count($chunks), $this->maxWorkers);
-        $results = [];
-        $pids = [];
-        
-        // Criar workers
-        for ($i = 0; $i < $workers; $i++) {
-            $chunkIndex = $i % count($chunks);
-            $chunk = $chunks[$chunkIndex];
-            
-            $pid = pcntl_fork();
-            
-            if ($pid == -1) {
-                // Falha no fork
-                throw new \RuntimeException('Não foi possível criar processo filho');
-            } elseif ($pid == 0) {
-                // Processo filho
-                $chunkResults = $this->processSingleChunk($chunk);
-                echo json_encode(['worker' => $i, 'results' => $chunkResults]) . "\n";
-                exit(0);
-            } else {
-                // Processo pai
-                $pids[$pid] = $i;
-            }
-        }
-        
-        // Coletar resultados dos workers
-        foreach ($pids as $pid => $workerIndex) {
-            pcntl_waitpid($pid, $status);
-        }
-        
-        // Fallback para processamento sequencial se PCNTL falhar
-        return $this->processChunksSequentially($chunks);
     }
 
     /**
@@ -182,7 +132,6 @@ class ParallelOdsProcessorService
         for ($row = $chunk['start']; $row <= $chunk['end']; $row++) {
             $rowData = $this->extractRowData($worksheet, $row, $highestColumn);
             
-            // Pular linhas vazias
             if (empty(array_filter($rowData))) {
                 continue;
             }
@@ -202,7 +151,6 @@ class ParallelOdsProcessorService
         $startTime = microtime(true);
         
         try {
-            // Reader ultra-otimizado
             $reader = $this->createUltraOptimizedReader();
             $spreadsheet = $reader->load($file->getPathname());
             
@@ -216,11 +164,7 @@ class ParallelOdsProcessorService
             $headerRow = $this->findHeaderRow($worksheet, $highestRow);
             $headers = $this->extractHeaders($worksheet, $headerRow, $worksheet->getHighestColumn());
             
-            // Pré-alocar arrays para melhor performance
             $data = [];
-            $data = array_fill(0, $highestRow - $headerRow, null);
-            
-            // Processamento em lote com cache
             $batchSize = 500;
             $rowIndex = 0;
             
@@ -234,13 +178,11 @@ class ParallelOdsProcessorService
                 $data[$rowIndex] = $this->validateRowDataOptimized($rowData, $headers, $row);
                 $rowIndex++;
                 
-                // Processar em lote
                 if ($rowIndex % $batchSize === 0) {
                     gc_collect_cycles();
                 }
             }
             
-            // Remover nulos
             $data = array_filter($data);
             
             $endTime = microtime(true);
@@ -271,7 +213,6 @@ class ParallelOdsProcessorService
     {
         $reader = IOFactory::createReader('Ods');
         
-        // Configurações máximas de performance
         if (method_exists($reader, 'setReadDataOnly')) {
             $reader->setReadDataOnly(true);
         }
@@ -306,13 +247,19 @@ class ParallelOdsProcessorService
         
         foreach (range('A', $highestColumn) as $column) {
             $cell = $worksheet->getCell($column . $row);
-            $value = $cell->getValue();
             
-            // Validação rápida de tipo
+            // Check if cell contains a formula
+            if ($cell->isFormula()) {
+                $value = $cell->getCalculatedValue();
+                // For formula cells, we want the formula itself, not the calculated result
+                $value = '=' . $cell->getValue();
+            } else {
+                $value = $cell->getValue();
+            }
+            
             if (is_numeric($value)) {
                 $value = is_float($value) ? round($value, 2) : (int)$value;
             } elseif ($value !== null) {
-                // Verificação rápida de data
                 if (\PhpOffice\PhpSpreadsheet\Shared\Date::isDateTime($cell)) {
                     $value = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($value)->format('Y-m-d');
                 } else {
@@ -361,7 +308,6 @@ class ParallelOdsProcessorService
                 continue;
             }
 
-            // Validações rápidas usando regex pré-compilado
             if (stripos($header['name'], 'date') !== false && !preg_match($datePattern, $value)) {
                 $validatedRow['validation']['errors'][] = [
                     'field' => $header['name'],
@@ -385,7 +331,7 @@ class ParallelOdsProcessorService
         return $validatedRow;
     }
 
-    // Métodos auxiliares (copiados do serviço original)
+    // Métodos auxiliares
     private function findWorksheet($spreadsheet, string $sheetName): ?Worksheet
     {
         if ($spreadsheet->sheetNameExists($sheetName)) {

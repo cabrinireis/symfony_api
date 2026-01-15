@@ -10,7 +10,10 @@ RUN apt-get update && apt-get install -y \
     curl \
     libxml2-dev \
     libxslt1-dev \
-    && docker-php-ext-install pdo pdo_pgsql zip dom simplexml xsl
+    libpng-dev \
+    libjpeg62-turbo-dev \
+    libfreetype6-dev \
+    && docker-php-ext-install pdo pdo_pgsql zip dom simplexml xsl gd
 
 # Copiar arquivo php.ini customizado
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/custom.ini
