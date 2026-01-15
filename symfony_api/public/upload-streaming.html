@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload de Arquivo ODS com Streaming</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            transition: border-color 0.3s;
+        }
+        .upload-area.dragover {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+        .upload-area.has-file {
+            border-color: #28a745;
+            background-color: #d4edda;
+        }
+        .file-input {
+            display: none;
+        }
+        .upload-btn {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        .upload-btn:hover {
+            background-color: #0056b3;
+        }
+        .upload-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .method-selector {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            justify-content: center;
+        }
+        .method-btn {
+            padding: 10px 20px;
+            border: 2px solid #007bff;
+            background: white;
+            color: #007bff;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .method-btn.active {
+            background: #007bff;
+            color: white;
+        }
+        .progress-container {
+            display: none;
+            margin: 20px 0;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background-color: #f0f0f0;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #0056b3);
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        .streaming-log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 20px 0;
+            display: none;
+        }
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        .log-start { background: #d4edda; color: #155724; }
+        .log-progress { background: #d1ecf1; color: #0c5460; }
+        .log-row { background: #fff3cd; color: #856404; }
+        .log-error { background: #f8d7da; color: #721c24; }
+        .log-complete { background: #d1ecf1; color: #0c5460; font-weight: bold; }
+        
+        .results {
+            display: none;
+            margin-top: 20px;
+        }
+        .summary {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            display: block;
+        }
+        .data-table thead {
+            position: sticky;
+            top: 0;
+            background: #f2f2f2;
+        }
+        .data-table th,
+        .data-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            min-width: 150px;
+        }
+        .data-table tr.error {
+            background-color: #f8d7da;
+        }
+        .data-table tr.warning {
+            background-color: #fff3cd;
+        }
+        .streaming-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            border-left: 4px solid #007bff;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Upload de Arquivo ODS com Streaming</h1>
+        <p>Processamento avançado com streaming para arquivos grandes</p>
+        
+        <div class="upload-area" id="uploadArea">
+            <div id="uploadText">
+                <p>Arraste seu arquivo .ods aqui ou clique para selecionar</p>
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    Selecionar Arquivo
+                </button>
+            </div>
+            <div id="fileInfo" style="display: none;">
+                <p><strong>Arquivo selecionado:</strong> <span id="fileName"></span></p>
+                <p><strong>Tamanho:</strong> <span id="fileSize"></span></p>
+                <div class="method-selector">
+                    <button class="method-btn active" data-method="streaming">Streaming JSON</button>
+                    <button class="method-btn" data-method="sse">Server-Sent Events</button>
+                    <button class="method-btn" data-method="chunks">Chunks</button>
+                </div>
+                <button class="upload-btn" onclick="uploadFile()">Processar Arquivo</button>
+                <button class="upload-btn" onclick="clearFile()">Limpar</button>
+            </div>
+        </div>
+        
+        <input type="file" id="fileInput" class="file-input" accept=".ods" onchange="handleFileSelect(event)">
+        
+        <div class="progress-container" id="progressContainer">
+            <h3>Progresso do Processamento</h3>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+            <div class="streaming-stats" id="streamingStats" style="display: none;">
+                <div class="stat-card">
+                    <div class="stat-value" id="statRows">0</div>
+                    <div class="stat-label">Linhas Processadas</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statErrors">0</div>
+                    <div class="stat-label">Erros</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statWarnings">0</div>
+                    <div class="stat-label">Avisos</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statSpeed">0</div>
+                    <div class="stat-label">Linhas/seg</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="streaming-log" id="streamingLog"></div>
+        
+        <div class="results" id="results">
+            <div id="summary"></div>
+            <div id="dataTable"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        let currentMethod = 'streaming';
+        let startTime = null;
+        let processedRows = 0;
+        let totalErrors = 0;
+        let totalWarnings = 0;
+
+        // Seleção de método
+        document.querySelectorAll('.method-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.method-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                currentMethod = this.dataset.method;
+            });
+        });
+
+        // Drag and drop
+        const uploadArea = document.getElementById('uploadArea');
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+
+        function handleFile(file) {
+            const extension = file.name.split('.').pop().toLowerCase();
+            if (extension !== 'ods') {
+                showError('Por favor, selecione um arquivo .ods válido');
+                return;
+            }
+
+            selectedFile = file;
+            displayFileInfo(file);
+        }
+
+        function displayFileInfo(file) {
+            document.getElementById('uploadText').style.display = 'none';
+            document.getElementById('fileInfo').style.display = 'block';
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatFileSize(file.size);
+            uploadArea.classList.add('has-file');
+        }
+
+        function clearFile() {
+            selectedFile = null;
+            document.getElementById('fileInput').value = '';
+            document.getElementById('uploadText').style.display = 'block';
+            document.getElementById('fileInfo').style.display = 'none';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('progressContainer').style.display = 'none';
+            document.getElementById('streamingLog').style.display = 'none';
+            uploadArea.classList.remove('has-file');
+            resetStats();
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function resetStats() {
+            processedRows = 0;
+            totalErrors = 0;
+            totalWarnings = 0;
+            startTime = null;
+            updateStats();
+        }
+
+        function updateStats() {
+            document.getElementById('statRows').textContent = processedRows;
+            document.getElementById('statErrors').textContent = totalErrors;
+            document.getElementById('statWarnings').textContent = totalWarnings;
+            
+            if (startTime) {
+                const elapsed = (Date.now() - startTime) / 1000;
+                const speed = elapsed > 0 ? Math.round(processedRows / elapsed) : 0;
+                document.getElementById('statSpeed').textContent = speed;
+            }
+        }
+
+        function addLogEntry(message, type = 'progress') {
+            const log = document.getElementById('streamingLog');
+            log.style.display = 'block';
+            
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function updateProgress(percentage) {
+            const progressFill = document.getElementById('progressFill');
+            progressFill.style.width = percentage + '%';
+            progressFill.textContent = Math.round(percentage) + '%';
+        }
+
+        async function uploadFile() {
+            if (!selectedFile) {
+                showError('Nenhum arquivo selecionado');
+                return;
+            }
+
+            resetStats();
+            startTime = Date.now();
+            
+            document.getElementById('progressContainer').style.display = 'block';
+            document.getElementById('streamingStats').style.display = 'grid';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('streamingLog').innerHTML = '';
+
+            try {
+                switch (currentMethod) {
+                    case 'streaming':
+                        await uploadWithStreaming();
+                        break;
+                    case 'sse':
+                        await uploadWithSSE();
+                        break;
+                    case 'chunks':
+                        await uploadWithChunks();
+                        break;
+                }
+            } catch (error) {
+                addLogEntry('Erro: ' + error.message, 'error');
+                showError('Erro de conexão: ' + error.message);
+            }
+        }
+
+        async function uploadWithStreaming() {
+            addLogEntry('Iniciando upload com streaming JSON...', 'start');
+            
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            const response = await fetch('/api/upload-ods-streaming', {
+                method: 'POST',
+                body: formData
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                
+                // Processar JSON chunks completos
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // Manter linha incompleta no buffer
+                
+                for (const line of lines) {
+                    if (line.trim()) {
+                        try {
+                            const data = JSON.parse(line);
+                            processStreamingData(data);
+                        } catch (e) {
+                            // Ignorar erros de parsing parcial
+                        }
+                    }
+                }
+            }
+        }
+
+        async function uploadWithSSE() {
+            addLogEntry('Iniciando upload com Server-Sent Events...', 'start');
+            
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            const response = await fetch('/api/upload-ods-sse', {
+                method: 'POST',
+                body: formData
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            processSSEData(data);
+                        } catch (e) {
+                            // Ignorar erros de parsing
+                        }
+                    }
+                }
+            }
+        }
+
+        async function uploadWithChunks() {
+            addLogEntry('Iniciando upload processado em chunks...', 'start');
+            
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            const response = await fetch('/api/upload-ods-chunks', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                addLogEntry(`Processamento concluído em ${result.chunks_processed} chunks`, 'complete');
+                updateProgress(100);
+                displayResults(result);
+            } else {
+                addLogEntry('Erro: ' + result.error, 'error');
+                showError(result.error);
+            }
+        }
+
+        function processStreamingData(data) {
+            if (data.success === false) {
+                addLogEntry('Erro: ' + data.error, 'error');
+                return;
+            }
+
+            if (data.data && Array.isArray(data.data)) {
+                data.data.forEach(row => {
+                    processedRows++;
+                    if (row.validation && !row.validation.is_valid) {
+                        totalErrors++;
+                    }
+                    if (row.validation && row.validation.warnings.length > 0) {
+                        totalWarnings++;
+                    }
+                });
+                
+                updateStats();
+                updateProgress(100); // Streaming não tem progresso intermediário
+                addLogEntry(`Processadas ${processedRows} linhas`, 'row');
+                
+                if (processedRows === data.total_rows) {
+                    addLogEntry('Processamento concluído!', 'complete');
+                    displayResults(data);
+                }
+            }
+        }
+
+        function processSSEData(data) {
+            switch (data.message || data.type) {
+                case 'start':
+                    addLogEntry(data.message, 'start');
+                    break;
+                case 'progress':
+                    addLogEntry(data.message, 'progress');
+                    if (data.progress) {
+                        updateProgress(data.progress.percentage);
+                    }
+                    break;
+                case 'row':
+                    processedRows++;
+                    if (data.data.validation && !data.data.validation.is_valid) {
+                        totalErrors++;
+                    }
+                    if (data.data.validation && data.data.validation.warnings.length > 0) {
+                        totalWarnings++;
+                    }
+                    updateStats();
+                    
+                    if (processedRows % 10 === 0) {
+                        addLogEntry(`Processadas ${processedRows} linhas`, 'row');
+                    }
+                    break;
+                case 'complete':
+                    addLogEntry(data.message, 'complete');
+                    updateProgress(100);
+                    break;
+                case 'error':
+                    addLogEntry('Erro: ' + data.message, 'error');
+                    break;
+            }
+        }
+
+        function displayResults(result) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.style.display = 'block';
+
+            const summaryDiv = document.getElementById('summary');
+            summaryDiv.innerHTML = `
+                <div class="summary">
+                    <h3>Resumo do Processamento (${currentMethod})</h3>
+                    <p><strong>Total de linhas:</strong> ${result.total_rows || result.data?.length || 0}</p>
+                    <p><strong>Linhas válidas:</strong> ${result.summary?.valid_rows || 'N/A'}</p>
+                    <p><strong>Linhas com erros:</strong> ${result.summary?.rows_with_errors || totalErrors}</p>
+                    <p><strong>Linhas com avisos:</strong> ${result.summary?.rows_with_warnings || totalWarnings}</p>
+                    <p><strong>Taxa de sucesso:</strong> ${result.summary?.success_rate || 'N/A'}%</p>
+                    <p><strong>Método:</strong> ${currentMethod}</p>
+                </div>
+            `;
+
+            const dataTableDiv = document.getElementById('dataTable');
+            if (result.data && result.data.length > 0) {
+                const table = createDataTable(result.data.slice(0, 100)); // Limitar a 100 linhas para display
+                dataTableDiv.innerHTML = table + `<p><em>Mostrando primeiras 100 linhas de ${result.data.length}</em></p>`;
+            } else {
+                dataTableDiv.innerHTML = '<p>Nenhum dado encontrado para exibir.</p>';
+            }
+        }
+
+        function createDataTable(data) {
+            if (data.length === 0) return '<p>Nenhum dado encontrado.</p>';
+
+            const firstRow = data[0];
+            const headers = Object.keys(firstRow.data || firstRow).filter(key => key !== 'validation');
+
+            let table = '<table class="data-table"><thead><tr>';
+            table += '<th>Linha</th>';
+            headers.forEach(header => {
+                table += `<th>${header}</th>`;
+            });
+            table += '<th>Status</th></tr></thead><tbody>';
+
+            data.forEach(row => {
+                const validation = row.validation || {};
+                const rowClass = validation.is_valid ? '' : 
+                               (validation.errors && validation.errors.length > 0 ? 'error' : 'warning');
+                table += `<tr class="${rowClass}">`;
+                table += `<td>${row.row_number || 'N/A'}</td>`;
+                
+                headers.forEach(header => {
+                    const value = (row.data || row)[header];
+                    table += `<td>${value || ''}</td>`;
+                });
+
+                let status = '✓ OK';
+                if (validation.errors && validation.errors.length > 0) {
+                    status = '❌ Erro';
+                } else if (validation.warnings && validation.warnings.length > 0) {
+                    status = '⚠️ Aviso';
+                }
+                table += `<td>${status}</td>`;
+                table += '</tr>';
+            });
+
+            table += '</tbody></table>';
+            return table;
+        }
+
+        function showError(message) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.style.display = 'block';
+            document.getElementById('summary').innerHTML = '';
+            document.getElementById('dataTable').innerHTML = `<div class="error"><h4>Erro:</h4><p>${message}</p></div>`;
+        }
+
+        // Verificar status da API
+        fetch('/api/streaming-status')
+            .then(response => response.json())
+            .then(status => {
+                console.log('Streaming API Status:', status);
+            })
+            .catch(error => {
+                console.error('Erro ao verificar status:', error);
+            });
+    </script>
+</body>
+</html>

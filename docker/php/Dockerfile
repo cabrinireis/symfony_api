@@ -8,7 +8,9 @@ RUN apt-get update && apt-get install -y \
     libzip-dev \
     zip \
     curl \
-    && docker-php-ext-install pdo pdo_pgsql zip
+    libxml2-dev \
+    libxslt1-dev \
+    && docker-php-ext-install pdo pdo_pgsql zip dom simplexml xsl
 
 # Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -19,5 +21,10 @@ RUN curl -sS https://get.symfony.com/cli/installer | bash \
 
 WORKDIR /var/www
 RUN chown -R www-data:www-data /var/www
+
+# Criar diretórios necessários para processamento de arquivos
+RUN mkdir -p /var/www/var/output /var/www/var/uploads \
+    && chown -R www-data:www-data /var/www/var \
+    && chmod 755 /var/www/var/output /var/www/var/uploads
 
 EXPOSE 9000
