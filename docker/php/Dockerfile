@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y \
     libxslt1-dev \
     && docker-php-ext-install pdo pdo_pgsql zip dom simplexml xsl
 
+# Copiar arquivo php.ini customizado
+COPY docker/php/php.ini /usr/local/etc/php/conf.d/custom.ini
+
 # Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
