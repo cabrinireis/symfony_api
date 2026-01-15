@@ -3,11 +3,12 @@
 namespace App\Service;
 
 use Symfony\Component\Cache\Adapter\FilesystemAdapter;
+use Symfony\Component\Cache\CacheItemPoolInterface;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 class PaginatedUploadCacheService
 {
-    private FilesystemAdapter $cache;
+    private CacheItemPoolInterface $cache;
     private ParallelOdsProcessorService $processor;
     private int $pageSize;
 
@@ -35,13 +36,14 @@ class PaginatedUploadCacheService
             }
 
             // Armazenar dados completos em cache
+            $data = $result['data'] ?? [];
             $cacheData = [
                 'session_id' => $sessionId,
-                'total_rows' => $result['total_rows'],
-                'total_pages' => ceil($result['total_rows'] / $this->pageSize),
+                'total_rows' => $result['total_rows'] ?? 0,
+                'total_pages' => ceil(($result['total_rows'] ?? 0) / $this->pageSize),
                 'page_size' => $this->pageSize,
-                'data' => $result['data'],
-                'headers' => $this->extractHeaders($result['data']),
+                'data' => $data,
+                'headers' => $this->extractHeaders($data),
                 'created_at' => time(),
                 'file_info' => [
                     'name' => $file->getClientOriginalName(),
@@ -50,7 +52,9 @@ class PaginatedUploadCacheService
                 ]
             ];
 
-            $this->cache->store($sessionId, $cacheData);
+            $cacheItem = $this->cache->getItem($sessionId);
+            $cacheItem->set($cacheData);
+            $this->cache->save($cacheItem);
 
             // Retornar primeira página imediatamente
             $firstPage = $this->getPage($sessionId, 1);
@@ -87,16 +91,15 @@ class PaginatedUploadCacheService
      */
     public function getPage(string $sessionId, int $page): array
     {
-        $cachedData = $this->cache->get($sessionId, function () {
-            return null;
-        });
-
-        if (!$cachedData) {
+        $cacheItem = $this->cache->getItem($sessionId);
+        if (!$cacheItem->isHit()) {
             return [
                 'success' => false,
                 'error' => 'Sessão não encontrada ou expirada'
             ];
         }
+        
+        $cachedData = $cacheItem->get();
 
         $totalPages = $cachedData['total_pages'];
         
@@ -143,16 +146,15 @@ class PaginatedUploadCacheService
      */
     public function getSessionInfo(string $sessionId): array
     {
-        $cachedData = $this->cache->get($sessionId, function () {
-            return null;
-        });
-
-        if (!$cachedData) {
+        $cacheItem = $this->cache->getItem($sessionId);
+        if (!$cacheItem->isHit()) {
             return [
                 'success' => false,
                 'error' => 'Sessão não encontrada ou expirada'
             ];
         }
+        
+        $cachedData = $cacheItem->get();
 
         return [
             'success' => true,
@@ -199,6 +201,15 @@ class PaginatedUploadCacheService
         if (isset($firstRow['data'])) {
             // Dados estruturados com validação
             foreach ($firstRow['data'] as $column => $value) {
+                $headers[] = [
+                    'column' => $column,
+                    'name' => $column,
+                    'type' => $this->detectDataType($value)
+                ];
+            }
+        } elseif (is_array($firstRow)) {
+            // Dados diretos como array
+            foreach ($firstRow as $column => $value) {
                 $headers[] = [
                     'column' => $column,
                     'name' => $column,
