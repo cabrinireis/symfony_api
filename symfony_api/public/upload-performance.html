@@ -241,16 +241,20 @@
             <div id="fileInfo" style="display: none;">
                 <p><strong>📄 Arquivo:</strong> <span id="fileName"></span></p>
                 <p><strong>💾 Tamanho:</strong> <span id="fileSize"></span></p>
-                <p><strong>🔧 Método Selecionado:</strong> <span id="selectedMethod">Ultra Rápido</span></p>
+                <p><strong>🔧 Método Selecionado:</strong> <span id="selectedMethod">Paginado</span></p>
                 
                 <div class="method-selector">
-                    <div class="method-card active" data-method="ultra_fast">
+                    <div class="method-card" data-method="ultra_fast">
                         <div class="method-title">⚡ Ultra Rápido</div>
                         <div class="method-description">Otimizado para velocidade máxima</div>
                     </div>
                     <div class="method-card" data-method="parallel">
                         <div class="method-title">🔄 Paralelo</div>
                         <div class="method-description">Usa múltiplos CPUs</div>
+                    </div>
+                    <div class="method-card active" data-method="paginated">
+                        <div class="method-title">📄 Paginado</div>
+                        <div class="method-description">Resposta imediata + navegação</div>
                     </div>
                     <div class="method-card" data-method="benchmark">
                         <div class="method-title">📊 Benchmark</div>
@@ -305,7 +309,8 @@
 
     <script>
         let selectedFile = null;
-        let currentMethod = 'ultra_fast';
+        let currentMethod = 'paginated';
+        let currentSessionId = null;
 
         // Seleção de método
         document.querySelectorAll('.method-card').forEach(card => {
@@ -367,6 +372,7 @@
 
         function clearFile() {
             selectedFile = null;
+            currentSessionId = null;
             document.getElementById('fileInput').value = '';
             document.getElementById('uploadText').style.display = 'block';
             document.getElementById('fileInfo').style.display = 'none';
@@ -427,6 +433,9 @@
                     case 'parallel':
                         endpoint = '/api/upload-ods-parallel';
                         break;
+                    case 'paginated':
+                        endpoint = '/api/upload-ods-paginated';
+                        break;
                     case 'benchmark':
                         await runBenchmark();
                         return;
@@ -446,7 +455,13 @@
 
                 if (result.success) {
                     showPerformanceStats(result);
-                    displayResults(result);
+                    
+                    if (currentMethod === 'paginated') {
+                        currentSessionId = result.session_id;
+                        displayPaginatedResults(result);
+                    } else {
+                        displayResults(result);
+                    }
                 } else {
                     showError(result.error || 'Erro ao processar arquivo');
                 }
@@ -492,6 +507,152 @@
             } catch (error) {
                 document.getElementById('loading').style.display = 'none';
                 showError('Erro de conexão: ' + error.message);
+            }
+        }
+
+        function displayPaginatedResults(result) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.style.display = 'block';
+
+            const summaryDiv = document.getElementById('summary');
+            summaryDiv.innerHTML = `
+                <div class="performance-comparison">
+                    <h3>📄 Resultados Paginados</h3>
+                    <div class="system-info">
+                        <strong>Arquivo:</strong> ${selectedFile.name}<br>
+                        <strong>Sessão:</strong> ${result.session_id}<br>
+                        <strong>Tempo Inicial:</strong> ${result.processing_time_ms}ms<br>
+                        <strong>Total de Páginas:</strong> ${result.pagination.total_pages}<br>
+                        <strong>Total de Linhas:</strong> ${result.pagination.total_rows}<br>
+                        <strong>Cache expira em:</strong> ${result.cache_expires_at}
+                    </div>
+                    
+                    <div style="margin-top: 20px;">
+                        <h4>📋 Navegação de Páginas</h4>
+                        <div id="paginationControls" style="margin: 15px 0;">
+                            <button class="upload-btn" onclick="loadPage(${result.pagination.current_page - 1})" 
+                                    ${result.pagination.has_prev ? '' : 'disabled'}>⬅️ Anterior</button>
+                            <span style="margin: 0 15px; font-weight: bold;">
+                                Página ${result.pagination.current_page} de ${result.pagination.total_pages}
+                            </span>
+                            <button class="upload-btn" onclick="loadPage(${result.pagination.current_page + 1})" 
+                                    ${result.pagination.has_next ? '' : 'disabled'}>Próxima ➡️</button>
+                        </div>
+                        
+                        <div id="pageData" style="margin-top: 15px;">
+                            ${displayPageData(result.data, result.headers)}
+                        </div>
+                        
+                        <div style="margin-top: 15px;">
+                            <button class="upload-btn" onclick="clearSession()" style="background: #dc3545;">
+                                🗑️ Limpar Sessão
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function displayPageData(data, headers) {
+            if (!data || data.length === 0) {
+                return '<p>Nenhum dado nesta página.</p>';
+            }
+
+            let html = `
+                <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 5px;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead style="position: sticky; top: 0; background: #007bff; color: white;">
+                            <tr>
+                                <th style="padding: 10px; border: 1px solid #ddd;">#</th>
+            `;
+
+            // Adicionar cabeçalhos
+            if (headers && headers.length > 0) {
+                headers.forEach(header => {
+                    html += `<th style="padding: 10px; border: 1px solid #ddd;">${header.name}</th>`;
+                });
+            } else {
+                // Usar chaves do primeiro registro como cabeçalho
+                const firstRow = data[0];
+                if (firstRow.data) {
+                    Object.keys(firstRow.data).forEach(key => {
+                        html += `<th style="padding: 10px; border: 1px solid #ddd;">${key}</th>`;
+                    });
+                }
+            }
+
+            html += '</tr></thead><tbody>';
+
+            // Adicionar dados
+            data.forEach((row, index) => {
+                html += '<tr>';
+                html += `<td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">${row.row_number || index + 1}</td>`;
+                
+                if (row.data) {
+                    Object.values(row.data).forEach(value => {
+                        html += `<td style="padding: 8px; border: 1px solid #ddd;">${value !== null && value !== '' ? value : '-'}</td>`;
+                    });
+                }
+                
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div>';
+            
+            return html;
+        }
+
+        async function loadPage(pageNum) {
+            if (!currentSessionId) {
+                showError('Sessão não encontrada');
+                return;
+            }
+
+            document.getElementById('loading').style.display = 'block';
+            
+            try {
+                const response = await fetch(`/api/upload-ods-page/${currentSessionId}/${pageNum}`);
+                const result = await response.json();
+                
+                document.getElementById('loading').style.display = 'none';
+
+                if (result.success) {
+                    // Atualizar controles de paginação
+                    const controlsDiv = document.getElementById('paginationControls');
+                    controlsDiv.innerHTML = `
+                        <button class="upload-btn" onclick="loadPage(${result.pagination.current_page - 1})" 
+                                ${result.pagination.has_prev ? '' : 'disabled'}>⬅️ Anterior</button>
+                        <span style="margin: 0 15px; font-weight: bold;">
+                            Página ${result.pagination.current_page} de ${result.pagination.total_pages}
+                        </span>
+                        <button class="upload-btn" onclick="loadPage(${result.pagination.current_page + 1})" 
+                                ${result.pagination.has_next ? '' : 'disabled'}>Próxima ➡️</button>
+                    `;
+
+                    // Atualizar dados da página
+                    document.getElementById('pageData').innerHTML = displayPageData(result.data, result.headers);
+                } else {
+                    showError(result.error || 'Erro ao carregar página');
+                }
+
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                showError('Erro de conexão: ' + error.message);
+            }
+        }
+
+        async function clearSession() {
+            if (!currentSessionId) {
+                return;
+            }
+
+            try {
+                await fetch(`/api/upload-ods-clear/${currentSessionId}`, { method: 'DELETE' });
+                currentSessionId = null;
+                clearFile();
+                alert('Sessão limpa com sucesso!');
+            } catch (error) {
+                console.error('Erro ao limpar sessão:', error);
             }
         }
 
