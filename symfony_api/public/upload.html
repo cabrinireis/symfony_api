@@ -123,12 +123,44 @@
             color: #856404;
             font-size: 12px;
         }
+        .form-group {
+            margin: 20px 0;
+        }
+        .sheet-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            margin-top: 5px;
+        }
+        .sheet-select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            margin-top: 5px;
+        }
+        .sheets-list {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Upload de Arquivo ODS</h1>
-        <p>Envie seu arquivo .ods para processamento da aba "XX) Onglet technique - TOTAL"</p>
+        <p>Envie seu arquivo .ods para processamento</p>
+        
+        <div class="form-group">
+            <label for="sheetName"><strong>Nome da Aba:</strong></label>
+            <input type="text" id="sheetName" class="sheet-input" placeholder="Digite o nome da aba desejada" value="XX) Onglet technique - TOTAL">
+            <button class="upload-btn" onclick="loadSheets()" id="loadSheetsBtn" style="display: none;">Carregar Abas Disponíveis</button>
+        </div>
         
         <div class="upload-area" id="uploadArea">
             <div id="uploadText">
@@ -210,6 +242,7 @@
             document.getElementById('fileInfo').style.display = 'block';
             document.getElementById('fileName').textContent = file.name;
             document.getElementById('fileSize').textContent = formatFileSize(file.size);
+            document.getElementById('loadSheetsBtn').style.display = 'inline-block';
             uploadArea.classList.add('has-file');
         }
 
@@ -219,6 +252,8 @@
             document.getElementById('uploadText').style.display = 'block';
             document.getElementById('fileInfo').style.display = 'none';
             document.getElementById('results').style.display = 'none';
+            document.getElementById('loadSheetsBtn').style.display = 'none';
+            document.getElementById('sheetsList').innerHTML = '';
             uploadArea.classList.remove('has-file');
         }
 
@@ -230,21 +265,99 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
+        async function loadSheets() {
+            if (!selectedFile) {
+                showError('Nenhum arquivo selecionado');
+                return;
+            }
+
+            try {
+                // Primeiro faz upload temporário para obter o caminho
+                const tempFormData = new FormData();
+                tempFormData.append('odsFile', selectedFile);
+                tempFormData.append('sheetName', 'temp'); // valor temporário
+                
+                const tempResponse = await fetch('/api/ods/upload', {
+                    method: 'POST',
+                    body: tempFormData
+                });
+
+                if (!tempResponse.ok) {
+                    throw new Error('Erro ao fazer upload temporário');
+                }
+
+                // Como não temos endpoint para listar abas via upload, vamos usar uma abordagem diferente
+                // Vamos mostrar um campo select com abas comuns ou permitir digitação livre
+                showSheetsSelector();
+                
+            } catch (error) {
+                showError('Erro ao carregar abas: ' + error.message);
+            }
+        }
+
+        function showSheetsSelector() {
+            const sheetsList = document.getElementById('sheetsList') || createSheetsListDiv();
+            
+            // Abas comuns que podem existir
+            const commonSheets = [
+                'XX) Onglet technique - TOTAL',
+                'Sheet1',
+                'Planilha1',
+                'Dados',
+                'Data',
+                'Total',
+                'Resumo'
+            ];
+
+            sheetsList.innerHTML = `
+                <div class="sheets-list">
+                    <strong>Abas disponíveis (selecione ou digite):</strong>
+                    <select id="sheetSelect" class="sheet-select" onchange="updateSheetName()">
+                        <option value="">-- Selecione uma aba --</option>
+                        ${commonSheets.map(sheet => `<option value="${sheet}">${sheet}</option>`).join('')}
+                    </select>
+                    <p><small>Se a aba não estiver na lista, digite o nome exato no campo acima.</small></p>
+                </div>
+            `;
+        }
+
+        function createSheetsListDiv() {
+            const div = document.createElement('div');
+            div.id = 'sheetsList';
+            document.querySelector('.form-group').appendChild(div);
+            return div;
+        }
+
+        function updateSheetName() {
+            const select = document.getElementById('sheetSelect');
+            const input = document.getElementById('sheetName');
+            if (select.value) {
+                input.value = select.value;
+            }
+        }
+
         async function uploadFile() {
             if (!selectedFile) {
                 showError('Nenhum arquivo selecionado');
                 return;
             }
 
+            const sheetName = document.getElementById('sheetName').value.trim();
+            if (!sheetName) {
+                showError('Por favor, digite o nome da aba');
+                return;
+            }
+
             const formData = new FormData();
-            formData.append('file', selectedFile);
+            formData.append('odsFile', selectedFile);
+            formData.append('sheetName', sheetName);
 
             // Mostrar progresso
             document.getElementById('progress').style.display = 'block';
             document.getElementById('results').style.display = 'none';
 
             try {
-                const response = await fetch('/api/upload-ods', {
+                const response = await fetch('/api/ods/upload', {
                     method: 'POST',
                     body: formData
                 });
@@ -272,31 +385,31 @@
 
             // Mostrar resumo
             const summaryDiv = document.getElementById('summary');
-            summaryDiv.innerHTML = `
+            let summaryContent = `
                 <div class="summary">
                     <h3>Resumo do Processamento</h3>
-                    <p><strong>Total de linhas:</strong> ${result.summary.total_rows}</p>
-                    <p><strong>Linhas válidas:</strong> ${result.summary.valid_rows}</p>
-                    <p><strong>Linhas com erros:</strong> ${result.summary.rows_with_errors}</p>
-                    <p><strong>Linhas com avisos:</strong> ${result.summary.rows_with_warnings}</p>
-                    <p><strong>Taxa de sucesso:</strong> ${result.summary.success_rate}%</p>
-                </div>
+                    <p><strong>Arquivo:</strong> ${result.originalFileName || 'Arquivo ODS'}</p>
+                    <p><strong>Aba processada:</strong> ${result.sheetName}</p>
+                    <p><strong>Total de linhas:</strong> ${result.rowCount}</p>
             `;
 
-            // Mostrar erros se houver
-            const errorsDiv = document.getElementById('errors');
-            if (result.errors && result.errors.length > 0) {
-                errorsDiv.innerHTML = `
-                    <div class="error">
-                        <h4>Erros encontrados:</h4>
-                        <ul>
-                            ${result.errors.map(error => `<li>${error}</li>`).join('')}
-                        </ul>
-                    </div>
+            if (result.truncated) {
+                summaryContent += `
+                    <p><strong>Atenção:</strong> <span style="color: orange;">⚠️ Dados truncados! Exibindo apenas 1000 de ${result.originalRowCount} linhas.</span></p>
+                    <p><em>${result.message}</em></p>
                 `;
             } else {
-                errorsDiv.innerHTML = '';
+                summaryContent += `
+                    <p><strong>Status:</strong> <span style="color: green;">✓ Sucesso</span></p>
+                `;
             }
+
+            summaryContent += '</div>';
+            summaryDiv.innerHTML = summaryContent;
+
+            // Limpar erros
+            const errorsDiv = document.getElementById('errors');
+            errorsDiv.innerHTML = '';
 
             // Mostrar tabela de dados
             const dataTableDiv = document.getElementById('dataTable');
@@ -304,50 +417,50 @@
                 const table = createDataTable(result.data);
                 dataTableDiv.innerHTML = table;
             } else {
-                dataTableDiv.innerHTML = '<p>Nenhum dado encontrado para exibir.</p>';
+                dataTableDiv.innerHTML = '<p>Nenhum dado encontrado na aba especificada.</p>';
             }
         }
 
         function createDataTable(data) {
             if (data.length === 0) return '<p>Nenhum dado encontrado.</p>';
 
-            // Extrair cabeçalhos da primeira linha
-            const firstRow = data[0];
-            const headers = Object.keys(firstRow.data).filter(key => key !== 'validation');
+            // Usa a primeira linha como cabeçalho
+            const headers = data[0];
+            const dataRows = data.slice(1); // Remove a primeira linha (cabeçalho) dos dados
 
             let table = '<table class="data-table"><thead><tr>';
-            table += '<th>Linha</th>';
-            headers.forEach(header => {
-                table += `<th>${header}</th>`;
-            });
-            table += '<th>Validação</th></tr></thead><tbody>';
-
-            data.forEach(row => {
-                const rowClass = row.validation.is_valid ? '' : 
-                               (row.validation.errors.length > 0 ? 'error' : 'warning');
-                table += `<tr class="${rowClass}">`;
-                table += `<td>${row.row_number}</td>`;
-                
+            
+            // Cria os cabeçalhos usando a primeira linha
+            if (Array.isArray(headers)) {
                 headers.forEach(header => {
-                    table += `<td>${row.data[header] || ''}</td>`;
+                    table += `<th>${header || ''}</th>`;
                 });
+            } else if (typeof headers === 'object') {
+                Object.values(headers).forEach(header => {
+                    table += `<th>${header || ''}</th>`;
+                });
+            } else {
+                table += `<th>${headers || ''}</th>`;
+            }
+            
+            table += '</tr></thead><tbody>';
 
-                // Coluna de validação
-                let validationInfo = '';
-                if (row.validation.errors.length > 0) {
-                    validationInfo = '<div class="validation-errors">' + 
-                        row.validation.errors.map(err => err.message).join(', ') + 
-                        '</div>';
+            // Adiciona as linhas de dados (exceto a primeira que é o cabeçalho)
+            dataRows.forEach(row => {
+                table += '<tr>';
+                
+                if (Array.isArray(row)) {
+                    row.forEach(cell => {
+                        table += `<td>${cell || ''}</td>`;
+                    });
+                } else if (typeof row === 'object') {
+                    Object.values(row).forEach(cell => {
+                        table += `<td>${cell || ''}</td>`;
+                    });
+                } else {
+                    table += `<td>${row || ''}</td>`;
                 }
-                if (row.validation.warnings.length > 0) {
-                    validationInfo += '<div class="validation-warnings">' + 
-                        row.validation.warnings.map(warn => warn.message).join(', ') + 
-                        '</div>';
-                }
-                if (!validationInfo) {
-                    validationInfo = '✓ OK';
-                }
-                table += `<td>${validationInfo}</td>`;
+                
                 table += '</tr>';
             });
 
@@ -362,16 +475,6 @@
             document.getElementById('errors').innerHTML = `<div class="error"><h4>Erro:</h4><p>${message}</p></div>`;
             document.getElementById('dataTable').innerHTML = '';
         }
-
-        // Verificar status da API ao carregar
-        fetch('/api/upload-status')
-            .then(response => response.json())
-            .then(status => {
-                console.log('API Status:', status);
-            })
-            .catch(error => {
-                console.error('Erro ao verificar status da API:', error);
-            });
     </script>
 </body>
 </html>
