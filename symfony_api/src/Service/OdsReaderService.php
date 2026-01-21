@@ -15,18 +15,15 @@ class OdsReaderService
         $data = [];
         $headers = [];
         $headerKeys = [];
+        $numPifColIndex = null;
 
         // Iterar sobre as abas do arquivo
         foreach ($reader->getSheetIterator() as $sheet) {
             // Verifica se é a aba que você procura
             if ($sheet->getName() === $targetSheetName) {
-                
                 $isFirstRow = true;
-                
-                // Itera sobre as linhas da aba específica
                 foreach ($sheet->getRowIterator() as $row) {
                     $cells = $row->toArray();
-                    
                     // Primeira linha = cabeçalhos
                     if ($isFirstRow) {
                         foreach ($cells as $index => $cellValue) {
@@ -38,11 +35,17 @@ class OdsReaderService
                                 'sortable' => true,
                                 'key' => $key,
                             ];
+                            if (strtolower(trim($cellValue)) === 'numéro pif') {
+                                $numPifColIndex = $index;
+                            }
                         }
                         $isFirstRow = false;
                         continue;
                     }
-                    
+                    // Case 1: Se 'Numéro PIF' == 0, ignora linha
+                    if ($numPifColIndex !== null && isset($cells[$numPifColIndex]) && (string)$cells[$numPifColIndex] === '0') {
+                        continue;
+                    }
                     // Linhas de dados
                     $rowData = [];
                     foreach ($headerKeys as $index => $key) {
@@ -50,7 +53,6 @@ class OdsReaderService
                     }
                     $data[] = $rowData;
                 }
-                
                 break;
             }
         }
