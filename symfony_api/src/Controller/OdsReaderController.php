@@ -82,6 +82,14 @@ class OdsReaderController extends AbstractController
         try {
             $uploadedFile = $request->files->get('odsFile');
             $sheetName = $request->request->get('sheetName');
+            
+            // Parâmetros de paginação
+            $page = (int) $request->request->get('page', 1);
+            $limit = (int) $request->request->get('limit', 30);
+            
+            // Validação dos parâmetros de paginação
+            $page = max(1, $page);
+            $limit = max(1, min(100, $limit)); // Limita entre 1 e 100
 
             if (!$uploadedFile) {
                 return new JsonResponse([
@@ -112,10 +120,28 @@ class OdsReaderController extends AbstractController
             // Remove o arquivo temporário
             unlink($tempPath);
 
+            // Aplica paginação nos dados
+            $allData = $sheetData['data'] ?? [];
+            $headers = $sheetData['headers'] ?? [];
+            $totalRows = count($allData);
+            $totalPages = (int) ceil($totalRows / $limit);
+            $offset = ($page - 1) * $limit;
+            
+            // Extrai a página solicitada
+            $paginatedData = array_slice($allData, $offset, $limit);
+
             return $this->createJsonResponse([
                 'success' => true,
-                'data' => $sheetData,
-                'rowCount' => count($sheetData),
+                'headers' => $headers,
+                'data' => $paginatedData,
+                'pagination' => [
+                    'currentPage' => $page,
+                    'perPage' => $limit,
+                    'totalRows' => $totalRows,
+                    'totalPages' => $totalPages,
+                    'hasNextPage' => $page < $totalPages,
+                    'hasPreviousPage' => $page > 1,
+                ],
                 'sheetName' => $sheetName,
                 'originalFileName' => $uploadedFile->getClientOriginalName()
             ]);
