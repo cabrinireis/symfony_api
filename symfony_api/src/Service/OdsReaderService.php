@@ -16,6 +16,8 @@ class OdsReaderService
         $headers = [];
         $headerKeys = [];
         $numPifColIndex = null;
+        $errors = [];
+        $rowNumber = 1; // Contador de linhas para identificar erros
 
         // Iterar sobre as abas do arquivo
         foreach ($reader->getSheetIterator() as $sheet) {
@@ -24,6 +26,10 @@ class OdsReaderService
                 $isFirstRow = true;
                 foreach ($sheet->getRowIterator() as $row) {
                     $cells = $row->toArray();
+                    // Garante que todos os valores sejam convertidos para string
+                    $cells = array_map(function ($cell) {
+                        return $cell instanceof \DateTimeImmutable ? $cell->format('Y-m-d H:i:s') : (string)$cell;
+                    }, $cells);
                     // Primeira linha = cabeçalhos
                     if ($isFirstRow) {
                         foreach ($cells as $index => $cellValue) {
@@ -46,6 +52,29 @@ class OdsReaderService
                     if ($numPifColIndex !== null && isset($cells[$numPifColIndex]) && (string)$cells[$numPifColIndex] === '0') {
                         continue;
                     }
+                    // Case 2: Se algum valor == '#N/D', adiciona erro e ignora linha
+                    $hasError = false;
+                    $errorColumns = [];
+                    foreach ($cells as $colIndex => $value) {
+                        if ((string)$value === '#N/D') {
+                            $hasError = true;
+                            $errorColumns[] = [
+                                'column' => $headers[$colIndex]['title'] ?? 'Column ' . ($colIndex + 1),
+                                'columnIndex' => $colIndex,
+                                'rowNumber' => $rowNumber,
+                                'value' => $value
+                            ];
+
+                        }
+                    }
+                    if ($hasError) {
+                        $errors[] = [
+                            'rowNumber' => $rowNumber,
+                            'columns' => $errorColumns
+                        ];
+                        $rowNumber++;
+                        continue;
+                    }
                     // Linhas de dados
                     $rowData = [];
                     foreach ($headerKeys as $index => $key) {
@@ -62,6 +91,7 @@ class OdsReaderService
         return [
             'headers' => $headers,
             'data' => $data,
+            'errors' => $errors,
         ];
     }
 
