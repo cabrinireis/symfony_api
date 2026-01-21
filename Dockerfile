@@ -8,27 +8,35 @@ RUN apt-get update && apt-get install -y \
     libzip-dev \
     zip \
     curl \
+    ca-certificates \
     libxml2-dev \
     libxslt1-dev \
     libpng-dev \
     libjpeg62-turbo-dev \
     libfreetype6-dev \
-    && docker-php-ext-install pdo pdo_pgsql zip dom simplexml xsl gd
+    && docker-php-ext-install pdo pdo_pgsql zip dom simplexml xsl gd \
+    && update-ca-certificates
 
 # Copiar arquivo php.ini customizado
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/custom.ini
 
-# Composer
+# Copiar certificado customizado
+COPY empresa.crt /usr/local/share/ca-certificates/empresa.crt
+RUN update-ca-certificates
+
+# Configurar Composer para confiar no certificado
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+RUN composer config -g cafile /etc/ssl/certs/ca-certificates.crt
 
 # Symfony CLI
 RUN curl -sS https://get.symfony.com/cli/installer | bash \
     && mv /root/.symfony5/bin/symfony /usr/local/bin/symfony
 
+# Criar diretório da aplicação
 WORKDIR /var/www
 RUN chown -R www-data:www-data /var/www
 
-# Criar diretórios necessários para processamento de arquivos
+# Criar diretórios necessários para uploads e outputs
 RUN mkdir -p /var/www/var/output /var/www/var/uploads \
     && chown -R www-data:www-data /var/www/var \
     && chmod 755 /var/www/var/output /var/www/var/uploads
