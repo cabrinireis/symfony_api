@@ -37,45 +37,6 @@ class OdsReaderController extends AbstractController
         $this->odsReaderService = $odsReaderService;
     }
 
-    #[Route('/api/ods/read', name: 'ods_read', methods: ['POST'])]
-    public function readOdsFile(Request $request): JsonResponse
-    {
-        try {
-            $data = json_decode($request->getContent(), true);
-            
-            if (!isset($data['filePath']) || !isset($data['sheetName'])) {
-                return new JsonResponse([
-                    'error' => 'Parâmetros obrigatórios: filePath e sheetName'
-                ], 400);
-            }
-
-            $filePath = $data['filePath'];
-            $sheetName = $data['sheetName'];
-
-            // Verifica se o arquivo existe
-            if (!file_exists($filePath)) {
-                return new JsonResponse([
-                    'error' => 'Arquivo não encontrado: ' . $filePath
-                ], 404);
-            }
-
-            // Lê os dados da aba específica
-            $sheetData = $this->odsReaderService->readSpecificSheet($filePath, $sheetName);
-
-            return $this->createJsonResponse([
-                'success' => true,
-                'data' => $sheetData,
-                'rowCount' => count($sheetData),
-                'sheetName' => $sheetName
-            ]);
-
-        } catch (\Exception $e) {
-            return new JsonResponse([
-                'error' => 'Erro ao processar arquivo ODS: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
     #[Route('/api/ods/upload', name: 'ods_upload', methods: ['POST'])]
     public function uploadAndReadOdsFile(Request $request): JsonResponse
     {
@@ -134,49 +95,4 @@ class OdsReaderController extends AbstractController
         }
     }
 
-    #[Route('/api/ods/sheets', name: 'ods_sheets', methods: ['POST'])]
-    public function getAvailableSheets(Request $request): JsonResponse
-    {
-        try {
-            $data = json_decode($request->getContent(), true);
-            
-            if (!isset($data['filePath'])) {
-                return new JsonResponse([
-                    'error' => 'Parâmetro obrigatório: filePath'
-                ], 400);
-            }
-
-            $filePath = $data['filePath'];
-
-            if (!file_exists($filePath)) {
-                return new JsonResponse([
-                    'error' => 'Arquivo não encontrado: ' . $filePath
-                ], 404);
-            }
-
-            // Usa o OpenSpout diretamente para obter as abas
-            $reader = new \OpenSpout\Reader\ODS\Reader();
-            $reader->open($filePath);
-
-            $sheets = [];
-            foreach ($reader->getSheetIterator() as $sheet) {
-                $sheets[] = [
-                    'name' => $sheet->getName(),
-                    'index' => $sheet->getIndex()
-                ];
-            }
-
-            $reader->close();
-
-            return new JsonResponse([
-                'success' => true,
-                'sheets' => $sheets
-            ]);
-
-        } catch (\Exception $e) {
-            return new JsonResponse([
-                'error' => 'Erro ao ler abas do arquivo: ' . $e->getMessage()
-            ], 500);
-        }
-    }
 }
