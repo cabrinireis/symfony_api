@@ -7,6 +7,8 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\Routing\Annotation\Route;
 
 class OdsReaderController extends AbstractController
@@ -91,6 +93,72 @@ class OdsReaderController extends AbstractController
         } catch (\Exception $e) {
             return new JsonResponse([
                 'error' => 'Erro ao processar upload: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    #[Route('/api/ods/download-filtered', name: 'ods_download_filtered', methods: ['POST'])]
+    public function downloadFilteredOds(Request $request): Response
+    {
+        try {
+            $uploadedFile = $request->files->get('odsFile');
+            $sheetName = $request->request->get('sheetName');
+
+            if (!$uploadedFile) {
+                return new JsonResponse([
+                    'error' => 'Nenhum arquivo ODS enviado'
+                ], 400);
+            }
+
+            if (!$sheetName) {
+                return new JsonResponse([
+                    'error' => 'Nome da aba é obrigatório'
+                ], 400);
+            }
+
+            // Validação do tipo de arquivo
+            if ($uploadedFile->getMimeType() !== 'application/vnd.oasis.opendocument.spreadsheet') {
+                return new JsonResponse([
+                    'error' => 'Arquivo inválido. Envie um arquivo ODS válido'
+                ], 400);
+            }
+
+            // Salva o arquivo temporariamente
+            $tempPath = sys_get_temp_dir() . '/' . uniqid('ods_', true) . '.ods';
+            $uploadedFile->move(sys_get_temp_dir(), basename($tempPath));
+
+            // Lê os dados
+            $sheetData = $this->odsReaderService->readSpecificSheet($tempPath, $sheetName);
+            
+            // Gera novo arquivo ODS com apenas dados válidos
+            $outputFile = $this->odsReaderService->generateFilteredOds(
+                $sheetData['data'],
+                $sheetData['headers'],
+                $sheetName
+            );
+
+            // Remove arquivo temporário
+            @unlink($tempPath);
+
+            // Retorna arquivo para download
+            $response = new BinaryFileResponse($outputFile);
+            $response->setContentDisposition(
+                ResponseHeaderBag::DISPOSITION_ATTACHMENT,
+                'dados_filtrados_' . date('Y-m-d_H-i-s') . '.ods'
+            );
+            $response->headers->set('Content-Type', 'application/vnd.oasis.opendocument.spreadsheet');
+            $response->headers->set('Access-Control-Allow-Origin', '*');
+            $response->headers->set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+            $response->headers->set('Access-Control-Allow-Headers', 'Content-Type');
+            
+            // Deleta arquivo após envio
+            $response->deleteFileAfterSend(true);
+
+            return $response;
+
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'error' => 'Erro ao processar download: ' . $e->getMessage()
             ], 500);
         }
     }

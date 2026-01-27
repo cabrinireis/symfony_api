@@ -3,7 +3,9 @@
 namespace App\Service;
 
 use OpenSpout\Reader\ODS\Reader;
+use OpenSpout\Writer\ODS\Writer;
 use OpenSpout\Common\Entity\Row;
+use OpenSpout\Common\Entity\Cell;
 
 class OdsReaderService
 {
@@ -112,5 +114,42 @@ class OdsReaderService
         $key = trim($key, '_');
 
         return $key ?: 'column_' . $index;
+    }
+
+    /**
+     * Gera um novo arquivo ODS com dados filtrados
+     */
+    public function generateFilteredOds(array $data, array $headers, string $sheetName): string
+    {
+        $tempFile = sys_get_temp_dir() . '/' . uniqid('download_', true) . '.ods';
+        
+        $writer = new Writer();
+        $writer->openToFile($tempFile);
+        
+        $sheet = $writer->getCurrentSheet();
+        $sheet->setName($sheetName);
+        
+        // Adiciona headers
+        $headerCells = [];
+        foreach ($headers as $header) {
+            $headerCells[] = $header['title'];
+        }
+        $headerRow = Row::fromValues($headerCells);
+        $writer->addRow($headerRow);
+        
+        // Adiciona dados filtrados
+        foreach ($data as $rowData) {
+            $rowValues = [];
+            foreach ($headers as $header) {
+                $cellValue = $rowData[$header['key']] ?? '';
+                $rowValues[] = $cellValue;
+            }
+            $dataRow = Row::fromValues($rowValues);
+            $writer->addRow($dataRow);
+        }
+        
+        $writer->close();
+        
+        return $tempFile;
     }
 }
