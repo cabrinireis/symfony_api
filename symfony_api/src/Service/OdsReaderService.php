@@ -33,14 +33,16 @@ class OdsReaderService
                     // Primeira linha = cabeçalhos
                     if ($isFirstRow) {
                         foreach ($cells as $index => $cellValue) {
-                            $key = $this->generateKey($cellValue, $index);
-                            $headerKeys[] = $key;
-                            $headers[] = [
-                                'title' => $cellValue ?? 'Column ' . ($index + 1),
-                                'align' => 'start',
-                                'sortable' => true,
-                                'key' => $key,
-                            ];
+                            if($cellValue) {
+                                $key = $this->generateKey($cellValue, $index);
+                                $headerKeys[] = $key;
+                                $headers[] = [
+                                    'title' => $cellValue,
+                                    'align' => 'start',
+                                    'sortable' => true,
+                                    'key' => $key,
+                                ];
+                            }
                             if (strtolower(trim($cellValue)) === 'numéro pif') {
                                 $numPifColIndex = $index;
                             }
@@ -56,7 +58,7 @@ class OdsReaderService
                     $hasError = false;
                     $errorColumns = [];
                     foreach ($cells as $colIndex => $value) {
-                        if ((string)$value === '#N/D') {
+                        if (str_contains((string)$value, '#N/')) {
                             $hasError = true;
                             $errorColumns[] = [
                                 'column' => $headers[$colIndex]['title'] ?? 'Column ' . ($colIndex + 1),
@@ -78,7 +80,7 @@ class OdsReaderService
                     // Linhas de dados
                     $rowData = [];
                     foreach ($headerKeys as $index => $key) {
-                        $rowData[$key] = $cells[$index] ?? null;
+                    $rowData[$key] = $cells[$index] ?? null;
                     }
                     $data[] = $rowData;
                 }

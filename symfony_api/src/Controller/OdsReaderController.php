@@ -19,7 +19,7 @@ class OdsReaderController extends AbstractController
         if (isset($data['data']) && is_array($data['data']) && count($data['data']) > 1000) {
             $data['truncated'] = true;
             $data['originalRowCount'] = count($data['data']);
-            $data['data'] = array_slice($data['data'], 0, 1000);
+            $data['data'] = array_slice($data['data'], 0, 5000);
             $data['message'] = 'Dados truncados para exibir as primeiras 1000 linhas. Use a API de paginação para obter todos os dados.';
         }
 
