@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Service\OdsReaderService;
+use App\Service\ValidationService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -14,6 +15,13 @@ use Symfony\Component\Routing\Annotation\Route;
 class OdsReaderController extends AbstractController
 {
     private OdsReaderService $odsReaderService;
+    private ValidationService $validationService;
+
+    public function __construct(OdsReaderService $odsReaderService, ValidationService $validationService)
+    {
+        $this->odsReaderService = $odsReaderService;
+        $this->validationService = $validationService;
+    }
 
     private function createJsonResponse(array $data): JsonResponse
     {
@@ -32,11 +40,6 @@ class OdsReaderController extends AbstractController
         $response->headers->set('Access-Control-Allow-Headers', 'Content-Type');
         
         return $response;
-    }
-
-    public function __construct(OdsReaderService $odsReaderService)
-    {
-        $this->odsReaderService = $odsReaderService;
     }
 
     #[Route('/api/ods/upload', name: 'ods_upload', methods: ['POST'])]
@@ -93,6 +96,196 @@ class OdsReaderController extends AbstractController
         } catch (\Exception $e) {
             return new JsonResponse([
                 'error' => 'Erro ao processar upload: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    #[Route('/api/ods/validate', name: 'ods_validate', methods: ['POST'])]
+    public function validateWithRules(Request $request): JsonResponse
+    {
+        try {
+            $uploadedFile = $request->files->get('odsFile');
+            $sheetName = $request->request->get('sheetName');
+            $validationsJson = $request->request->get('validations');
+
+            if (!$uploadedFile) {
+                return new JsonResponse([
+                    'error' => 'Nenhum arquivo ODS enviado'
+                ], 400);
+            }
+
+            if (!$sheetName) {
+                return new JsonResponse([
+                    'error' => 'Nome da aba é obrigatório'
+                ], 400);
+            }
+
+            if (!$validationsJson) {
+                return new JsonResponse([
+                    'error' => 'Nenhuma validação fornecida'
+                ], 400);
+            }
+
+            // Validação do tipo de arquivo
+            if ($uploadedFile->getMimeType() !== 'application/vnd.oasis.opendocument.spreadsheet') {
+                return new JsonResponse([
+                    'error' => 'Arquivo inválido. Envie um arquivo ODS válido'
+                ], 400);
+            }
+
+            // Decodificar validações JSON
+            $validations = json_decode($validationsJson, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return new JsonResponse([
+                    'error' => 'JSON de validações inválido: ' . json_last_error_msg()
+                ], 400);
+            }
+
+            // Salva o arquivo temporariamente
+            $tempPath = sys_get_temp_dir() . '/' . uniqid('ods_', true) . '.ods';
+            $uploadedFile->move(sys_get_temp_dir(), basename($tempPath));
+
+            // Lê os dados
+            $sheetData = $this->odsReaderService->readSpecificSheet($tempPath, $sheetName);
+            $data = $sheetData['data'] ?? [];
+            $headers = $sheetData['headers'] ?? [];
+
+            // Validar dados contra as regras
+            $validationResult = $this->validationService->validate($data, $headers, $validations);
+
+            // Remove arquivo temporário
+            @unlink($tempPath);
+
+            return $this->createJsonResponse($validationResult);
+
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'error' => 'Erro ao processar validação: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    #[Route('/api/ods/debug-validation', name: 'ods_debug_validation', methods: ['POST'])]
+    public function debugValidation(Request $request): JsonResponse
+    {
+        try {
+            $uploadedFile = $request->files->get('odsFile');
+            $sheetName = $request->request->get('sheetName');
+            $validationsJson = $request->request->get('validations');
+
+            if (!$uploadedFile || !$sheetName || !$validationsJson) {
+                return new JsonResponse(['error' => 'Parâmetros faltando'], 400);
+            }
+
+            // Decodificar validações JSON
+            $validations = json_decode($validationsJson, true);
+
+            // Salvar arquivo temporariamente
+            $tempPath = sys_get_temp_dir() . '/' . uniqid('ods_', true) . '.ods';
+            $uploadedFile->move(sys_get_temp_dir(), basename($tempPath));
+
+            // Lê os dados
+            $sheetData = $this->odsReaderService->readSpecificSheet($tempPath, $sheetName);
+            $data = $sheetData['data'] ?? [];
+            $headers = $sheetData['headers'] ?? [];
+
+            // Debug: mostra primeiros dados
+            $debugInfo = [
+                'totalRows' => count($data),
+                'headers' => array_map(fn($h) => $h['title'], $headers),
+                'firstRow' => $data[0] ?? null,
+                'validations' => $validations,
+                'validationCount' => count($validations),
+            ];
+
+            // Validar dados contra as regras
+            $validationResult = $this->validationService->validate($data, $headers, $validations);
+
+            // Remove arquivo temporário
+            @unlink($tempPath);
+
+            return $this->createJsonResponse([
+                'success' => true,
+                'debug' => $debugInfo,
+                'validationResult' => $validationResult,
+                 'debug' => $validationResult['debug'] ?? [] // Mostra no navegador
+            ]);
+
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'error' => 'Erro ao processar: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    #[Route('/api/ods/filter', name: 'ods_filter', methods: ['POST'])]
+    public function filterAndReturnData(Request $request): JsonResponse
+    {
+        try {
+            $uploadedFile = $request->files->get('odsFile');
+            $sheetName = $request->request->get('sheetName');
+            $validationsJson = $request->request->get('validations');
+
+            if (!$uploadedFile) {
+                return new JsonResponse([
+                    'error' => 'Nenhum arquivo ODS enviado'
+                ], 400);
+            }
+
+            if (!$sheetName) {
+                return new JsonResponse([
+                    'error' => 'Nome da aba é obrigatório'
+                ], 400);
+            }
+
+            if (!$validationsJson) {
+                return new JsonResponse([
+                    'error' => 'Nenhuma validação fornecida'
+                ], 400);
+            }
+
+            // Validação do tipo de arquivo
+            if ($uploadedFile->getMimeType() !== 'application/vnd.oasis.opendocument.spreadsheet') {
+                return new JsonResponse([
+                    'error' => 'Arquivo inválido. Envie um arquivo ODS válido'
+                ], 400);
+            }
+
+            // Decodificar validações JSON
+            $validations = json_decode($validationsJson, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return new JsonResponse([
+                    'error' => 'JSON de validações inválido: ' . json_last_error_msg()
+                ], 400);
+            }
+
+            // Salva o arquivo temporariamente
+            $tempPath = sys_get_temp_dir() . '/' . uniqid('ods_', true) . '.ods';
+            $uploadedFile->move(sys_get_temp_dir(), basename($tempPath));
+
+            // Lê os dados
+            $sheetData = $this->odsReaderService->readSpecificSheet($tempPath, $sheetName);
+            $allData = $sheetData['data'] ?? [];
+            $headers = $sheetData['headers'] ?? [];
+
+            // Filtrar apenas dados válidos
+            $filteredData = $this->validationService->filterValidData($allData, $headers, $validations);
+
+            // Remove arquivo temporário
+            @unlink($tempPath);
+
+            return $this->createJsonResponse([
+                'success' => true,
+                'data' => $filteredData,
+                'headers' => $headers,
+                'originalCount' => count($allData),
+                'filteredCount' => count($filteredData),
+                'message' => 'Dados filtrados com sucesso. ' . count($allData) - count($filteredData) . ' linhas removidas.'
+            ]);
+
+        } catch (\Exception $e) {
+            return new JsonResponse([
+                'error' => 'Erro ao processar filtro: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -164,3 +357,4 @@ class OdsReaderController extends AbstractController
     }
 
 }
+

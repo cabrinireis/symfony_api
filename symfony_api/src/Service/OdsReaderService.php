@@ -9,6 +9,125 @@ use OpenSpout\Common\Entity\Cell;
 
 class OdsReaderService
 {
+    /**
+     * Detecta o tipo real do valor no ODS
+     */
+    private function detectCellType($cellValue): string
+    {
+        // Se for null/vazio
+        if ($cellValue === null || $cellValue === '') {
+            return 'null';
+        }
+
+        // Se for DateTime (LibreOffice armazena assim)
+        if ($cellValue instanceof \DateTimeInterface) {
+            return 'datetime';
+        }
+
+        // Se for booleano
+        if (is_bool($cellValue)) {
+            return 'boolean';
+        }
+
+        // Se for número
+        if (is_int($cellValue) || is_float($cellValue)) {
+            // Verifica se pode ser data serial do Excel/ODS
+            // Datas válidas ficam entre ~0 e ~100000
+            if (is_float($cellValue) && $cellValue > 0 && $cellValue < 100000) {
+                // Pode ser data serial
+                return 'number_or_date_serial';
+            }
+            return 'number';
+        }
+
+        // Se for string que parece data
+        if (is_string($cellValue)) {
+            if ($this->looksLikeDate($cellValue)) {
+                return 'date_string';
+            }
+            return 'string';
+        }
+
+        return 'unknown';
+    }
+
+    /**
+     * Verifica se uma string parece ser uma data
+     */
+    private function looksLikeDate(string $value): bool
+    {
+        $patterns = [
+            '/^\d{1,2}\/\d{1,2}\/\d{4}/',           // DD/MM/YYYY
+            '/^\d{4}-\d{1,2}-\d{1,2}/',             // YYYY-MM-DD
+            '/^\d{1,2}-\d{1,2}-\d{4}/',             // DD-MM-YYYY
+            '/^\d{1,2}\/\d{1,2}\/\d{2}/',           // DD/MM/YY
+            '/^\d{4}\/\d{1,2}\/\d{1,2}/',           // YYYY/MM/DD
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, trim($value))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Formata o valor preservando o tipo original
+     */
+    private function formatCellValue($cellValue, string $detectedType): string
+    {
+        // ✅ DateTime nativo
+        if ($detectedType === 'datetime' && $cellValue instanceof \DateTimeInterface) {
+            return $cellValue->format('Y-m-d H:i:s');
+        }
+
+        // ✅ Data serial do Excel/ODS (número)
+        if ($detectedType === 'number_or_date_serial' && is_float($cellValue)) {
+            try {
+                // ODS base: 1899-12-30 (dia 0)
+                $baseDate = new \DateTime('1899-12-30');
+                $days = (int)$cellValue;
+                $baseDate->modify("+{$days} days");
+
+                // Se tem parte decimal, são horas/minutos/segundos
+                $fraction = $cellValue - $days;
+                if ($fraction > 0) {
+                    $seconds = round($fraction * 86400); // 24 * 60 * 60
+                    $baseDate->modify("+{$seconds} seconds");
+                }
+
+                return $baseDate->format('Y-m-d H:i:s');
+            } catch (\Exception $e) {
+                return (string)$cellValue;
+            }
+        }
+
+        // ✅ Data em string
+        if ($detectedType === 'date_string') {
+            return (string)$cellValue;
+        }
+
+        // ✅ Número
+        if ($detectedType === 'number') {
+            return (string)$cellValue;
+        }
+
+        // ✅ Booleano
+        if ($detectedType === 'boolean') {
+            return $cellValue ? 'true' : 'false';
+        }
+
+        // ✅ Null/vazio
+        if ($detectedType === 'null') {
+            return '';
+        }
+
+        // Default
+        return (string)$cellValue;
+    }
+
     public function readSpecificSheet(string $filePath, string $targetSheetName): array
     {
         $reader = new Reader();
@@ -27,15 +146,21 @@ class OdsReaderService
             if ($sheet->getName() === $targetSheetName) {
                 $isFirstRow = true;
                 foreach ($sheet->getRowIterator() as $row) {
-                    $cells = $row->toArray();
-                    // Garante que todos os valores sejam convertidos para string
-                    $cells = array_map(function ($cell) {
-                        return $cell instanceof \DateTimeImmutable ? $cell->format('Y-m-d H:i:s') : (string)$cell;
-                    }, $cells);
+                    $cells = $row->getCells();
+                    $formattedCells = [];
+                    
+                    // Processa cada célula detectando tipo e formatando
+                    foreach ($cells as $cell) {
+                        $cellValue = $cell->getValue();
+                        $detectedType = $this->detectCellType($cellValue);
+                        $formattedValue = $this->formatCellValue($cellValue, $detectedType);
+                        $formattedCells[] = $formattedValue;
+                    }
+                    
                     // Primeira linha = cabeçalhos
                     if ($isFirstRow) {
-                        foreach ($cells as $index => $cellValue) {
-                            if($cellValue) {
+                        foreach ($formattedCells as $index => $cellValue) {
+                            if ($cellValue) {
                                 $key = $this->generateKey($cellValue, $index);
                                 $headerKeys[] = $key;
                                 $headers[] = [
@@ -52,14 +177,16 @@ class OdsReaderService
                         $isFirstRow = false;
                         continue;
                     }
+                    
                     // Case 1: Se 'Numéro PIF' == 0, ignora linha
-                    if ($numPifColIndex !== null && isset($cells[$numPifColIndex]) && (string)$cells[$numPifColIndex] === '0') {
+                    if ($numPifColIndex !== null && isset($formattedCells[$numPifColIndex]) && $formattedCells[$numPifColIndex] === '0') {
                         continue;
                     }
+                    
                     // Case 2: Se algum valor == '#N/D', adiciona erro e ignora linha
                     $hasError = false;
                     $errorColumns = [];
-                    foreach ($cells as $colIndex => $value) {
+                    foreach ($formattedCells as $colIndex => $value) {
                         if (str_contains((string)$value, '#N/')) {
                             $hasError = true;
                             $errorColumns[] = [
@@ -68,9 +195,9 @@ class OdsReaderService
                                 'rowNumber' => $rowNumber,
                                 'value' => $value
                             ];
-
                         }
                     }
+                    
                     if ($hasError) {
                         $errors[] = [
                             'rowNumber' => $rowNumber,
@@ -79,10 +206,11 @@ class OdsReaderService
                         $rowNumber++;
                         continue;
                     }
+                    
                     // Linhas de dados
                     $rowData = [];
                     foreach ($headerKeys as $index => $key) {
-                    $rowData[$key] = $cells[$index] ?? null;
+                        $rowData[$key] = $formattedCells[$index] ?? null;
                     }
                     $data[] = $rowData;
                 }
