@@ -11,58 +11,47 @@ class DateValidator implements ValidatorInterface
     {
         $value = trim((string)$value);
 
-        // Verificar se é obrigatório e está vazio
+        // Verificar se Ã© obrigatÃ³rio e estÃ¡ vazio
         if (($rules['required'] ?? false) && $value === '') {
-            return 'Campo obrigatório não preenchido';
+            return 'Campo obrigatÃ³rio nÃ£o preenchido';
         }
 
-        // Se vazio e não obrigatório, é válido
+        // Se vazio e nÃ£o obrigatÃ³rio, Ã© vÃ¡lido
         if ($value === '') {
             return null;
         }
 
-        // Formato esperado (padrão: DD/MM/YYYY)
         $format = $rules['format'] ?? 'DD/MM/YYYY';
-
-        // Mapeia formato da interface para formato PHP
         $phpFormat = $this->convertToPhpDateFormat($format);
-        
-        // Tenta validar com o formato exato primeiro
-        $dateTime = \DateTime::createFromFormat($phpFormat, $value);
 
-        // Se falhar, tenta ser flexível com a hora
-        if ($dateTime === false && !str_contains($phpFormat, 'H')) {
-            // Tenta remover a hora se existir
-            $valueWithoutTime = preg_replace('/\s\d{2}:\d{2}:\d{2}$/', '', $value);
-            if ($valueWithoutTime !== $value) {
-                $dateTime = \DateTime::createFromFormat($phpFormat, $valueWithoutTime);
+        // Valor nativo de data vindo do ODS (normalizado pelo OdsReaderService)
+        $candidates = [[$phpFormat, $value]];
+        if (preg_match('/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$/', $value)) {
+            $candidates[] = [str_contains($value, ':') ? 'Y-m-d H:i:s' : 'Y-m-d', $value];
+        }
+        // Tolera hora extra quando o formato não a inclui
+        if (!str_contains($phpFormat, 'H')) {
+            $candidates[] = [$phpFormat, preg_replace('/\s\d{2}:\d{2}(:\d{2})?$/', '', $value)];
+        }
+
+        foreach ($candidates as [$fmt, $val]) {
+            $dt = \DateTime::createFromFormat('!' . $fmt, $val);
+            $err = \DateTime::getLastErrors();
+            if ($dt !== false && (!$err || ($err['warning_count'] === 0 && $err['error_count'] === 0))
+                && $dt->format($fmt) === $val) {
+                return null;
             }
         }
 
-        // Valida se a data é válida
-        if ($dateTime === false) {
-            return "Formato de data inválido. Esperado: {$format}. Recebido: {$value}";
-        }
-
-        // Verifica se a data faz sentido (evita datas inválidas como 32/13/2024)
-        $errors = \DateTime::getLastErrors();
-        if ($errors && $errors['error_count'] > 0) {
-            return "Data inválida: {$value}";
-        }
-
-        return null;
+        return "Formato de data inválido. Esperado: {$format}. Recebido: {$value}";
     }
 
     private function convertToPhpDateFormat(string $format): string
     {
-        $mapping = [
-            'DD/MM/YYYY' => 'd/m/Y',
-            'DD/MM/YYYY HH:mm:ss' => 'd/m/Y H:i:s',
-            'YYYY-MM-DD' => 'Y-m-d',
-            'YYYY-MM-DD HH:mm:ss' => 'Y-m-d H:i:s',
-            'MM/DD/YYYY' => 'm/d/Y',
-        ];
-
-        return $mapping[$format] ?? 'd/m/Y';
+        return strtr($format, [
+            'YYYY' => 'Y', 'YY' => 'y',
+            'DD' => 'd', 'MM' => 'm',
+            'HH' => 'H', 'mm' => 'i', 'ss' => 's',
+        ]);
     }
 }

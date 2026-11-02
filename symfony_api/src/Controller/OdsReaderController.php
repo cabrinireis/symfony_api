@@ -296,6 +296,7 @@ class OdsReaderController extends AbstractController
         try {
             $uploadedFile = $request->files->get('odsFile');
             $sheetName = $request->request->get('sheetName');
+            $validationsJson = $request->request->get('validations');
 
             if (!$uploadedFile) {
                 return new JsonResponse([
@@ -322,11 +323,22 @@ class OdsReaderController extends AbstractController
 
             // Lê os dados
             $sheetData = $this->odsReaderService->readSpecificSheet($tempPath, $sheetName);
+            $allData = $sheetData['data'] ?? [];
+            $headers = $sheetData['headers'] ?? [];
+
+            // Se há validações, aplica o filtro
+            $filteredData = $allData;
+            if ($validationsJson) {
+                $validations = json_decode($validationsJson, true);
+                if (json_last_error() === JSON_ERROR_NONE && !empty($validations)) {
+                    $filteredData = $this->validationService->filterValidData($allData, $headers, $validations);
+                }
+            }
             
-            // Gera novo arquivo ODS com apenas dados válidos
+            // Gera novo arquivo ODS com dados filtrados
             $outputFile = $this->odsReaderService->generateFilteredOds(
-                $sheetData['data'],
-                $sheetData['headers'],
+                $filteredData,
+                $headers,
                 $sheetName
             );
 
