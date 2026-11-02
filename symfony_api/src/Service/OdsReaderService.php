@@ -10,37 +10,37 @@ use OpenSpout\Common\Entity\Cell;
 class OdsReaderService
 {
     /**
-     * Detecta o tipo real do valor no ODS
+     * Detects the real value type in ODS
      */
     private function detectCellType($cellValue): string
     {
-        // Se for null/vazio
+        // Null/empty value
         if ($cellValue === null || $cellValue === '') {
             return 'null';
         }
 
-        // Se for DateTime (LibreOffice armazena assim)
+        // Native DateTime value (LibreOffice stores values like this)
         if ($cellValue instanceof \DateTimeInterface) {
             return 'datetime';
         }
 
-        // Se for booleano
+        // Boolean value
         if (is_bool($cellValue)) {
             return 'boolean';
         }
 
-        // Se for número
+        // Numeric value
         if (is_int($cellValue) || is_float($cellValue)) {
-            // Verifica se pode ser data serial do Excel/ODS
-            // Datas válidas ficam entre ~0 e ~100000
+            // Check whether it could be an Excel/ODS serial date
+            // Valid serial date values are roughly between 0 and 100000
             if (is_float($cellValue) && $cellValue > 0 && $cellValue < 100000) {
-                // Pode ser data serial
+                // Could be a serial date
                 return 'number_or_date_serial';
             }
             return 'number';
         }
 
-        // Se for string que parece data
+        // String that looks like a date
         if (is_string($cellValue)) {
             if ($this->looksLikeDate($cellValue)) {
                 return 'date_string';
@@ -52,7 +52,7 @@ class OdsReaderService
     }
 
     /**
-     * Verifica se uma string parece ser uma data
+     * Checks whether a string looks like a date
      */
     private function looksLikeDate(string $value): bool
     {
@@ -74,24 +74,24 @@ class OdsReaderService
     }
 
     /**
-     * Formata o valor preservando o tipo original
+     * Formats value while preserving original type
      */
     private function formatCellValue($cellValue, string $detectedType): string
     {
-        // ✅ DateTime nativo
+        // ✅ Native DateTime
         if ($detectedType === 'datetime' && $cellValue instanceof \DateTimeInterface) {
             return $cellValue->format('Y-m-d H:i:s');
         }
 
-        // ✅ Data serial do Excel/ODS (número)
+        // ✅ Excel/ODS serial date (numeric)
         if ($detectedType === 'number_or_date_serial' && is_float($cellValue)) {
             try {
-                // ODS base: 1899-12-30 (dia 0)
+                // ODS base date: 1899-12-30 (day 0)
                 $baseDate = new \DateTime('1899-12-30');
                 $days = (int)$cellValue;
                 $baseDate->modify("+{$days} days");
 
-                // Se tem parte decimal, são horas/minutos/segundos
+                // Decimal part represents hours/minutes/seconds
                 $fraction = $cellValue - $days;
                 if ($fraction > 0) {
                     $seconds = round($fraction * 86400); // 24 * 60 * 60
@@ -104,22 +104,22 @@ class OdsReaderService
             }
         }
 
-        // ✅ Data em string
+        // ✅ Date-like string
         if ($detectedType === 'date_string') {
             return (string)$cellValue;
         }
 
-        // ✅ Número
+        // ✅ Number
         if ($detectedType === 'number') {
             return (string)$cellValue;
         }
 
-        // ✅ Booleano
+        // ✅ Boolean
         if ($detectedType === 'boolean') {
             return $cellValue ? 'true' : 'false';
         }
 
-        // ✅ Null/vazio
+        // ✅ Null/empty
         if ($detectedType === 'null') {
             return '';
         }
@@ -138,18 +138,18 @@ class OdsReaderService
         $headerKeys = [];
         $numPifColIndex = null;
         $errors = [];
-        $rowNumber = 1; // Contador de linhas para identificar erros
+        $rowNumber = 1; // Row counter used to identify errors
 
-        // Iterar sobre as abas do arquivo
+        // Iterate over workbook sheets
         foreach ($reader->getSheetIterator() as $sheet) {
-            // Verifica se é a aba que você procura
+            // Check if this is the target sheet
             if ($sheet->getName() === $targetSheetName) {
                 $isFirstRow = true;
                 foreach ($sheet->getRowIterator() as $row) {
                     $cells = $row->getCells();
                     $formattedCells = [];
                     
-                    // Processa cada célula detectando tipo e formatando
+                    // Process each cell: detect type and format value
                     foreach ($cells as $cell) {
                         $cellValue = $cell->getValue();
                         $detectedType = $this->detectCellType($cellValue);
@@ -157,7 +157,7 @@ class OdsReaderService
                         $formattedCells[] = $formattedValue;
                     }
                     
-                    // Primeira linha = cabeçalhos
+                    // First row = headers
                     if ($isFirstRow) {
                         foreach ($formattedCells as $index => $cellValue) {
                             if ($cellValue) {
@@ -178,12 +178,12 @@ class OdsReaderService
                         continue;
                     }
                     
-                    // Case 1: Se 'Numéro PIF' == 0, ignora linha
+                    // Case 1: if 'Numéro PIF' == 0, skip row
                     if ($numPifColIndex !== null && isset($formattedCells[$numPifColIndex]) && $formattedCells[$numPifColIndex] === '0') {
                         continue;
                     }
                     
-                    // Case 2: Se algum valor == '#N/D', adiciona erro e ignora linha
+                    // Case 2: if any value is '#N/...', register error and skip row
                     $hasError = false;
                     $errorColumns = [];
                     foreach ($formattedCells as $colIndex => $value) {
@@ -207,7 +207,7 @@ class OdsReaderService
                         continue;
                     }
                     
-                    // Linhas de dados
+                    // Data rows
                     $rowData = [];
                     foreach ($headerKeys as $index => $key) {
                         $rowData[$key] = $formattedCells[$index] ?? null;
@@ -228,7 +228,7 @@ class OdsReaderService
     }
 
     /**
-     * Gera uma key válida a partir do título da coluna
+        * Generates a valid key from the column title
      */
     private function generateKey(?string $title, int $index): string
     {
@@ -236,7 +236,7 @@ class OdsReaderService
             return 'column_' . $index;
         }
 
-        // Remove acentos, converte para minúsculas e substitui espaços por underscore
+        // Remove accents, lowercase, and replace spaces with underscore
         $key = strtolower(trim($title));
         $key = preg_replace('/[^a-z0-9]+/', '_', $key);
         $key = trim($key, '_');
@@ -245,7 +245,7 @@ class OdsReaderService
     }
 
     /**
-     * Gera um novo arquivo ODS com dados filtrados
+        * Generates a new ODS file with filtered rows
      */
     public function generateFilteredOds(array $data, array $headers, string $sheetName): string
     {
@@ -257,7 +257,7 @@ class OdsReaderService
         $sheet = $writer->getCurrentSheet();
         $sheet->setName($sheetName);
         
-        // Adiciona headers
+        // Add headers
         $headerCells = [];
         foreach ($headers as $header) {
             $headerCells[] = $header['title'];
@@ -265,7 +265,7 @@ class OdsReaderService
         $headerRow = Row::fromValues($headerCells);
         $writer->addRow($headerRow);
         
-        // Adiciona dados filtrados
+        // Add filtered data
         foreach ($data as $rowData) {
             $rowValues = [];
             foreach ($headers as $header) {

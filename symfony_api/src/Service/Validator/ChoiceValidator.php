@@ -3,7 +3,7 @@
 namespace App\Service\Validator;
 
 /**
- * Validador de Escolha (Enum)
+ * Choice Validator (Enum)
  */
 class ChoiceValidator implements ValidatorInterface
 {
@@ -11,19 +11,19 @@ class ChoiceValidator implements ValidatorInterface
     {
         $value = (string)$value;
 
-        // Verificar se é obrigatório e está vazio
+        // Check if required and empty
         if (($rules['required'] ?? false) && empty($value)) {
             return 'Campo obrigatório não preenchido';
         }
 
-        // Se vazio e não obrigatório, é válido
+        // If empty and not required, it is valid
         if (empty($value)) {
             return null;
         }
 
         $allowedValues = $rules['allowedValues'] ?? [];
 
-        // Validar se está na lista de valores permitidos
+        // Validate if value is in the allowed list
         if (!in_array($value, $allowedValues, true)) {
             $valuesList = implode(', ', $allowedValues);
             return "Deve ser um dos valores: $valuesList";

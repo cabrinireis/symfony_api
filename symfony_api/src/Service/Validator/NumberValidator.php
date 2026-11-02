@@ -3,48 +3,48 @@
 namespace App\Service\Validator;
 
 /**
- * Validador de Números
+ * Number Validator
  */
 class NumberValidator implements ValidatorInterface
 {
     public function validate($value, array $rules): ?string
     {
-        // Converter para string e remover espaços
+        // Convert to string and trim spaces
         $value = trim((string)$value);
 
-        // Verificar se é obrigatório e está vazio
+        // Check if required and empty
         if (($rules['required'] ?? false) && $value === '') {
             return 'Campo obrigatório não preenchido';
         }
 
-        // Se vazio e não obrigatório, é válido
+        // If empty and not required, it is valid
         if ($value === '') {
             return null;
         }
-        // Validar se é numérico
+        // Validate numeric value
         if (!is_numeric($value)) {
             return 'Não é um número válido';
         }
 
-        // Converter para número (float para suportar decimais)
+        // Convert to number (float supports decimals)
         $numValue = (float)$value;
 
-        // Validar zero PRIMEIRO (antes de min/max)
+        // Validate zero FIRST (before min/max)
         if (!($rules['allowZero'] ?? true) && $numValue == 0) {
             return 'Zero não é permitido';
         }
 
-        // Validar casas decimais
+        // Validate decimal places
         if (!($rules['allowDecimal'] ?? true) && strpos($value, '.') !== false) {
             return 'Casas decimais não permitidas';
         }
 
-        // Validar mínimo
+        // Validate minimum value
         if (isset($rules['minValue']) && $numValue < (float)$rules['minValue']) {
             return "Deve ser maior ou igual a {$rules['minValue']}";
         }
 
-        // Validar máximo
+        // Validate maximum value
         if (isset($rules['maxValue']) && $numValue > (float)$rules['maxValue']) {
             return "Deve ser menor ou igual a {$rules['maxValue']}";
         }

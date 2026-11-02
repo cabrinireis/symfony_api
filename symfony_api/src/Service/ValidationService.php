@@ -5,39 +5,39 @@ namespace App\Service;
 use App\Service\Validator\ValidatorFactory;
 
 /**
- * Serviço responsável por validar dados contra regras customizadas
+ * Service responsible for validating data against custom rules
  * 
- * Separação de responsabilidades:
- * - OdsReaderService: Lê o arquivo ODS
- * - ValidationService: Valida os dados contra as regras
- * - ValidatorFactory: Cria validadores específicos
- * - Validadores específicos: Implementam a lógica de validação para cada tipo
+ * Responsibility split:
+ * - OdsReaderService: Reads the ODS file
+ * - ValidationService: Validates data against rules
+ * - ValidatorFactory: Creates specific validators
+ * - Specific validators: Implement validation logic for each type
  */
 class ValidationService
 {
     /**
-     * Valida dados contra regras customizadas
+     * Validates data against custom rules
      * 
-     * @param array $data Dados a validar (array de arrays)
-     * @param array $headers Headers do arquivo (array com 'title' e 'key')
-     * @param array $validations Regras de validação
+     * @param array $data Data to validate (array of arrays)
+     * @param array $headers File headers (array with 'title' and 'key')
+     * @param array $validations Validation rules
      * 
-     * @return array Resultado da validação com erros encontrados
+     * @return array Validation result with found errors
      */
     public function validate(array $data, array $headers, array $validations): array
     {
         $validationErrors = [];
         $validatedRowCount = 0;
-           $debugInfo = []; // ADICIONE ISTO
+           $debugInfo = []; // ADD THIS
 
-        // Criar mapa de coluna nome → índice
+        // Build map: column name -> key
         $columnIndexMap = $this->createColumnIndexMap($headers);
 
-        // Para cada linha de dados
+        // For each data row
         foreach ($data as $rowIndex => $row) {
-            $rowNumber = $rowIndex + 2; // +1 porque começa em 0, +1 porque linha 1 é header
+            $rowNumber = $rowIndex + 2; // +1 because index starts at 0, +1 because row 1 is header
 
-            // Para cada validação configurada
+            // For each configured validation
             foreach ($validations as $validation) {
                 $columnName = $validation['column'] ?? null;
                 $columnKey = $columnIndexMap[$columnName] ?? null;
@@ -46,9 +46,9 @@ class ValidationService
                     continue;
                 }
 
-                // Extrair valor da célula
+                 // Extract cell value
                 $cellValue = $row[$columnKey] ?? '';
-                 // DEBUG: Adicione isto
+                  // DEBUG: Add this
             $debugInfo[] = [
                 'column' => $columnName,
                 'value' => $cellValue,
@@ -57,7 +57,7 @@ class ValidationService
                 'is_numeric' => is_numeric($cellValue),
                 'is_string' => is_string($cellValue)
             ];
-                // Executar validação
+                // Execute validation
                 $error = $this->validateCell(
                     $cellValue,
                     $validation,
@@ -81,18 +81,18 @@ class ValidationService
             'validatedRowsCount' => $validatedRowCount,
             'validationErrors' => $validationErrors,
             'errorCount' => count($validationErrors),
-            'debug' => $debugInfo // ADICIONE ISTO
+            'debug' => $debugInfo // ADD THIS
         ];
     }
 
     /**
-     * Filtra dados válidos mantendo apenas linhas sem erro na validação
+     * Filters valid data keeping only rows without validation errors
      * 
-     * @param array $data Dados originais
-     * @param array $headers Headers do arquivo
-     * @param array $validations Regras de validação
+     * @param array $data Original data
+     * @param array $headers File headers
+     * @param array $validations Validation rules
      * 
-     * @return array Dados filtrados (apenas linhas válidas)
+     * @return array Filtered data (valid rows only)
      */
     public function filterValidData(array $data, array $headers, array $validations): array
     {
@@ -102,7 +102,7 @@ class ValidationService
         foreach ($data as $row) {
             $isRowValid = true;
 
-            // Verificar se a linha tem algum erro
+            // Check if row has any error
             foreach ($validations as $validation) {
                 $columnName = $validation['column'] ?? null;
                 $columnKey = $columnIndexMap[$columnName] ?? null;
@@ -113,14 +113,14 @@ class ValidationService
 
                 $cellValue = $row[$columnKey] ?? '';
 
-                // Se houver erro em qualquer célula desta linha, marca como inválida
+                // If any cell fails, mark row as invalid
                 if ($this->validateCell($cellValue, $validation, 0, $columnName)) {
                     $isRowValid = false;
                     break;
                 }
             }
 
-            // Se a linha é válida, adicionar aos dados filtrados
+            // If row is valid, add it to filtered data
             if ($isRowValid) {
                 $validData[] = $row;
             }
@@ -130,14 +130,14 @@ class ValidationService
     }
 
     /**
-     * Valida uma célula individual contra suas regras
+        * Validates a single cell against its rules
      * 
-     * @param mixed $value Valor da célula
-     * @param array $validation Regra de validação
-     * @param int $rowNumber Número da linha
-     * @param string $columnName Nome da coluna
+        * @param mixed $value Cell value
+        * @param array $validation Validation rule
+        * @param int $rowNumber Row number
+        * @param string $columnName Column name
      * 
-     * @return null|array Null se válido, array com erro se inválido
+        * @return null|array Null if valid, error array if invalid
      */
     private function validateCell($value, array $validation, int $rowNumber, string $columnName): ?array
     {
@@ -148,7 +148,7 @@ class ValidationService
             return null;
         }
 
-        // Criar validador apropriado
+        // Create the appropriate validator
         try {
             $validator = ValidatorFactory::create($type);
         } catch (\InvalidArgumentException $e) {
@@ -161,7 +161,7 @@ class ValidationService
             ];
         }
 
-        // Executar validação
+        // Execute validation
         $errorMessage = $validator->validate($value, $rules);
 
         if ($errorMessage) {
@@ -178,11 +178,11 @@ class ValidationService
     }
 
     /**
-     * Cria um mapa de coluna nome → chave (key)
+        * Creates a map of column name -> key
      * 
-     * @param array $headers Headers do arquivo
+        * @param array $headers File headers
      * 
-     * @return array Mapa [columnName => columnKey]
+        * @return array Map [columnName => columnKey]
      */
     private function createColumnIndexMap(array $headers): array
     {

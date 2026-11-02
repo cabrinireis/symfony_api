@@ -25,7 +25,7 @@ class OdsReaderController extends AbstractController
 
     private function createJsonResponse(array $data): JsonResponse
     {
-        // Limita o tamanho dos dados para evitar truncamento (máximo 1000 linhas)
+        // Limits payload size to avoid truncation (maximum 1000 rows)
         if (isset($data['data']) && is_array($data['data']) && count($data['data']) > 1000) {
             $data['truncated'] = true;
             $data['originalRowCount'] = count($data['data']);
@@ -61,21 +61,21 @@ class OdsReaderController extends AbstractController
                 ], 400);
             }
 
-            // Validação do tipo de arquivo
+            // File type validation
             if ($uploadedFile->getMimeType() !== 'application/vnd.oasis.opendocument.spreadsheet') {
                 return new JsonResponse([
                     'error' => 'Arquivo inválido. Envie um arquivo ODS válido'
                 ], 400);
             }
 
-            // Salva o arquivo temporariamente
+            // Save file temporarily
             $tempPath = sys_get_temp_dir() . '/' . uniqid('ods_', true) . '.ods';
             $uploadedFile->move(sys_get_temp_dir(), basename($tempPath));
 
-            // Lê os dados
+            // Read data
             $sheetData = $this->odsReaderService->readSpecificSheet($tempPath, $sheetName);
 
-            // Remove o arquivo temporário
+            // Remove temporary file
             unlink($tempPath);
 
             $allData = $sheetData['data'] ?? [];
@@ -126,14 +126,14 @@ class OdsReaderController extends AbstractController
                 ], 400);
             }
 
-            // Validação do tipo de arquivo
+            // File type validation
             if ($uploadedFile->getMimeType() !== 'application/vnd.oasis.opendocument.spreadsheet') {
                 return new JsonResponse([
                     'error' => 'Arquivo inválido. Envie um arquivo ODS válido'
                 ], 400);
             }
 
-            // Decodificar validações JSON
+            // Decode JSON validations
             $validations = json_decode($validationsJson, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
                 return new JsonResponse([
@@ -141,19 +141,19 @@ class OdsReaderController extends AbstractController
                 ], 400);
             }
 
-            // Salva o arquivo temporariamente
+            // Save file temporarily
             $tempPath = sys_get_temp_dir() . '/' . uniqid('ods_', true) . '.ods';
             $uploadedFile->move(sys_get_temp_dir(), basename($tempPath));
 
-            // Lê os dados
+            // Read data
             $sheetData = $this->odsReaderService->readSpecificSheet($tempPath, $sheetName);
             $data = $sheetData['data'] ?? [];
             $headers = $sheetData['headers'] ?? [];
 
-            // Validar dados contra as regras
+            // Validate data against rules
             $validationResult = $this->validationService->validate($data, $headers, $validations);
 
-            // Remove arquivo temporário
+            // Remove temporary file
             @unlink($tempPath);
 
             return $this->createJsonResponse($validationResult);
@@ -177,19 +177,19 @@ class OdsReaderController extends AbstractController
                 return new JsonResponse(['error' => 'Parâmetros faltando'], 400);
             }
 
-            // Decodificar validações JSON
+            // Decode JSON validations
             $validations = json_decode($validationsJson, true);
 
-            // Salvar arquivo temporariamente
+            // Save file temporarily
             $tempPath = sys_get_temp_dir() . '/' . uniqid('ods_', true) . '.ods';
             $uploadedFile->move(sys_get_temp_dir(), basename($tempPath));
 
-            // Lê os dados
+            // Read data
             $sheetData = $this->odsReaderService->readSpecificSheet($tempPath, $sheetName);
             $data = $sheetData['data'] ?? [];
             $headers = $sheetData['headers'] ?? [];
 
-            // Debug: mostra primeiros dados
+            // Debug: show first rows
             $debugInfo = [
                 'totalRows' => count($data),
                 'headers' => array_map(fn($h) => $h['title'], $headers),
@@ -198,17 +198,17 @@ class OdsReaderController extends AbstractController
                 'validationCount' => count($validations),
             ];
 
-            // Validar dados contra as regras
+            // Validate data against rules
             $validationResult = $this->validationService->validate($data, $headers, $validations);
 
-            // Remove arquivo temporário
+            // Remove temporary file
             @unlink($tempPath);
 
             return $this->createJsonResponse([
                 'success' => true,
                 'debug' => $debugInfo,
                 'validationResult' => $validationResult,
-                 'debug' => $validationResult['debug'] ?? [] // Mostra no navegador
+                  'debug' => $validationResult['debug'] ?? [] // Display in browser
             ]);
 
         } catch (\Exception $e) {
@@ -244,14 +244,14 @@ class OdsReaderController extends AbstractController
                 ], 400);
             }
 
-            // Validação do tipo de arquivo
+            // File type validation
             if ($uploadedFile->getMimeType() !== 'application/vnd.oasis.opendocument.spreadsheet') {
                 return new JsonResponse([
                     'error' => 'Arquivo inválido. Envie um arquivo ODS válido'
                 ], 400);
             }
 
-            // Decodificar validações JSON
+            // Decode JSON validations
             $validations = json_decode($validationsJson, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
                 return new JsonResponse([
@@ -259,19 +259,19 @@ class OdsReaderController extends AbstractController
                 ], 400);
             }
 
-            // Salva o arquivo temporariamente
+            // Save file temporarily
             $tempPath = sys_get_temp_dir() . '/' . uniqid('ods_', true) . '.ods';
             $uploadedFile->move(sys_get_temp_dir(), basename($tempPath));
 
-            // Lê os dados
+            // Read data
             $sheetData = $this->odsReaderService->readSpecificSheet($tempPath, $sheetName);
             $allData = $sheetData['data'] ?? [];
             $headers = $sheetData['headers'] ?? [];
 
-            // Filtrar apenas dados válidos
+            // Keep only valid rows
             $filteredData = $this->validationService->filterValidData($allData, $headers, $validations);
 
-            // Remove arquivo temporário
+            // Remove temporary file
             @unlink($tempPath);
 
             return $this->createJsonResponse([
@@ -310,23 +310,23 @@ class OdsReaderController extends AbstractController
                 ], 400);
             }
 
-            // Validação do tipo de arquivo
+            // File type validation
             if ($uploadedFile->getMimeType() !== 'application/vnd.oasis.opendocument.spreadsheet') {
                 return new JsonResponse([
                     'error' => 'Arquivo inválido. Envie um arquivo ODS válido'
                 ], 400);
             }
 
-            // Salva o arquivo temporariamente
+            // Save file temporarily
             $tempPath = sys_get_temp_dir() . '/' . uniqid('ods_', true) . '.ods';
             $uploadedFile->move(sys_get_temp_dir(), basename($tempPath));
 
-            // Lê os dados
+            // Read data
             $sheetData = $this->odsReaderService->readSpecificSheet($tempPath, $sheetName);
             $allData = $sheetData['data'] ?? [];
             $headers = $sheetData['headers'] ?? [];
 
-            // Se há validações, aplica o filtro
+            // If validations are provided, apply filtering
             $filteredData = $allData;
             if ($validationsJson) {
                 $validations = json_decode($validationsJson, true);
@@ -335,17 +335,17 @@ class OdsReaderController extends AbstractController
                 }
             }
             
-            // Gera novo arquivo ODS com dados filtrados
+            // Generate a new ODS file with filtered rows
             $outputFile = $this->odsReaderService->generateFilteredOds(
                 $filteredData,
                 $headers,
                 $sheetName
             );
 
-            // Remove arquivo temporário
+            // Remove temporary file
             @unlink($tempPath);
 
-            // Retorna arquivo para download
+            // Return file for download
             $response = new BinaryFileResponse($outputFile);
             $response->setContentDisposition(
                 ResponseHeaderBag::DISPOSITION_ATTACHMENT,
@@ -356,7 +356,7 @@ class OdsReaderController extends AbstractController
             $response->headers->set('Access-Control-Allow-Methods', 'POST, OPTIONS');
             $response->headers->set('Access-Control-Allow-Headers', 'Content-Type');
             
-            // Deleta arquivo após envio
+            // Delete file after response is sent
             $response->deleteFileAfterSend(true);
 
             return $response;

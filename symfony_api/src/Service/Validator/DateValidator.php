@@ -3,7 +3,7 @@
 namespace App\Service\Validator;
 
 /**
- * Validador de Datas
+ * Date Validator
  */
 class DateValidator implements ValidatorInterface
 {
@@ -11,12 +11,12 @@ class DateValidator implements ValidatorInterface
     {
         $value = trim((string)$value);
 
-        // Verificar se Ã© obrigatÃ³rio e estÃ¡ vazio
+        // Check if required and empty
         if (($rules['required'] ?? false) && $value === '') {
             return 'Campo obrigatÃ³rio nÃ£o preenchido';
         }
 
-        // Se vazio e nÃ£o obrigatÃ³rio, Ã© vÃ¡lido
+        // If empty and not required, it is valid
         if ($value === '') {
             return null;
         }
@@ -24,12 +24,12 @@ class DateValidator implements ValidatorInterface
         $format = $rules['format'] ?? 'DD/MM/YYYY';
         $phpFormat = $this->convertToPhpDateFormat($format);
 
-        // Valor nativo de data vindo do ODS (normalizado pelo OdsReaderService)
+        // Native date value from ODS (normalized by OdsReaderService)
         $candidates = [[$phpFormat, $value]];
         if (preg_match('/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?$/', $value)) {
             $candidates[] = [str_contains($value, ':') ? 'Y-m-d H:i:s' : 'Y-m-d', $value];
         }
-        // Tolera hora extra quando o formato não a inclui
+        // Tolerates extra time component when format does not include it
         if (!str_contains($phpFormat, 'H')) {
             $candidates[] = [$phpFormat, preg_replace('/\s\d{2}:\d{2}(:\d{2})?$/', '', $value)];
         }

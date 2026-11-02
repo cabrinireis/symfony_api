@@ -3,18 +3,18 @@
 namespace App\Service\Validator;
 
 /**
- * Factory para criar validadores específicos
+ * Factory for creating specific validators
  */
 class ValidatorFactory
 {
     /**
-     * Cria um validador baseado no tipo
+     * Creates a validator based on type
      * 
-     * @param string $type Tipo de validação (date, number, text, email, choice)
+     * @param string $type Validation type (date, number, text, email, choice)
      * 
-     * @return ValidatorInterface Validador apropriado
+     * @return ValidatorInterface Appropriate validator
      * 
-     * @throws \InvalidArgumentException Se tipo não suportado
+     * @throws \InvalidArgumentException If type is not supported
      */
     public static function create(string $type): ValidatorInterface
     {

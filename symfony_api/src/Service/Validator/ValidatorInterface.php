@@ -3,17 +3,17 @@
 namespace App\Service\Validator;
 
 /**
- * Interface base para todos os validadores
+ * Base interface for all validators
  */
 interface ValidatorInterface
 {
     /**
-     * Valida um valor de célula
+     * Validates a cell value
      * 
-     * @param mixed $value Valor a validar
-     * @param array $rules Regras de validação
+     * @param mixed $value Value to validate
+     * @param array $rules Validation rules
      * 
-     * @return null|string Null se válido, mensagem de erro se inválido
+     * @return null|string Null if valid, error message if invalid
      */
     public function validate($value, array $rules): ?string;
 }
