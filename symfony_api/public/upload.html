@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload de Arquivo ODS</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            transition: border-color 0.3s;
+        }
+        .upload-area.dragover {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+        .upload-area.has-file {
+            border-color: #28a745;
+            background-color: #d4edda;
+        }
+        .file-input {
+            display: none;
+        }
+        .upload-btn {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        .upload-btn:hover {
+            background-color: #0056b3;
+        }
+        .upload-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .progress {
+            display: none;
+            margin: 20px 0;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #007bff;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .results {
+            display: none;
+            margin-top: 20px;
+        }
+        .error {
+            color: #dc3545;
+            background-color: #f8d7da;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success {
+            color: #155724;
+            background-color: #d4edda;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .summary {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .data-table th,
+        .data-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .data-table th {
+            background-color: #f2f2f2;
+        }
+        .data-table tr.error {
+            background-color: #f8d7da;
+        }
+        .data-table tr.warning {
+            background-color: #fff3cd;
+        }
+        .validation-errors {
+            color: #dc3545;
+            font-size: 12px;
+        }
+        .validation-warnings {
+            color: #856404;
+            font-size: 12px;
+        }
+        .form-group {
+            margin: 20px 0;
+        }
+        .sheet-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            margin-top: 5px;
+        }
+        .sheet-select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            margin-top: 5px;
+        }
+        .sheets-list {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Upload de Arquivo ODS</h1>
+        <p>Envie seu arquivo .ods para processamento</p>
+        
+        <div class="form-group">
+            <label for="sheetName"><strong>Nome da Aba:</strong></label>
+            <input type="text" id="sheetName" class="sheet-input" placeholder="Digite o nome da aba desejada" value="XX) Onglet technique - TOTAL">
+            <button class="upload-btn" onclick="loadSheets()" id="loadSheetsBtn" style="display: none;">Carregar Abas Disponíveis</button>
+        </div>
+        
+        <div class="upload-area" id="uploadArea">
+            <div id="uploadText">
+                <p>Arraste seu arquivo .ods aqui ou clique para selecionar</p>
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    Selecionar Arquivo
+                </button>
+            </div>
+            <div id="fileInfo" style="display: none;">
+                <p><strong>Arquivo selecionado:</strong> <span id="fileName"></span></p>
+                <p><strong>Tamanho:</strong> <span id="fileSize"></span></p>
+                <button class="upload-btn" onclick="uploadFile()">Processar Arquivo</button>
+                <button class="upload-btn" onclick="clearFile()">Limpar</button>
+            </div>
+        </div>
+        
+        <input type="file" id="fileInput" class="file-input" accept=".ods" onchange="handleFileSelect(event)">
+        
+        <div class="progress" id="progress">
+            <p>Processando arquivo...</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+        
+        <div class="results" id="results">
+            <div id="summary"></div>
+            <div id="errors"></div>
+            <div id="dataTable"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+
+        // Drag and drop
+        const uploadArea = document.getElementById('uploadArea');
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+
+        function handleFile(file) {
+            // Validar extensão
+            const extension = file.name.split('.').pop().toLowerCase();
+            if (extension !== 'ods') {
+                showError('Por favor, selecione um arquivo .ods válido');
+                return;
+            }
+
+            selectedFile = file;
+            displayFileInfo(file);
+        }
+
+        function displayFileInfo(file) {
+            document.getElementById('uploadText').style.display = 'none';
+            document.getElementById('fileInfo').style.display = 'block';
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatFileSize(file.size);
+            document.getElementById('loadSheetsBtn').style.display = 'inline-block';
+            uploadArea.classList.add('has-file');
+        }
+
+        function clearFile() {
+            selectedFile = null;
+            document.getElementById('fileInput').value = '';
+            document.getElementById('uploadText').style.display = 'block';
+            document.getElementById('fileInfo').style.display = 'none';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('loadSheetsBtn').style.display = 'none';
+            document.getElementById('sheetsList').innerHTML = '';
+            uploadArea.classList.remove('has-file');
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        async function loadSheets() {
+            if (!selectedFile) {
+                showError('Nenhum arquivo selecionado');
+                return;
+            }
+
+            try {
+                // Primeiro faz upload temporário para obter o caminho
+                const tempFormData = new FormData();
+                tempFormData.append('odsFile', selectedFile);
+                tempFormData.append('sheetName', 'temp'); // valor temporário
+                
+                const tempResponse = await fetch('/api/ods/upload', {
+                    method: 'POST',
+                    body: tempFormData
+                });
+
+                if (!tempResponse.ok) {
+                    throw new Error('Erro ao fazer upload temporário');
+                }
+
+                // Como não temos endpoint para listar abas via upload, vamos usar uma abordagem diferente
+                // Vamos mostrar um campo select com abas comuns ou permitir digitação livre
+                showSheetsSelector();
+                
+            } catch (error) {
+                showError('Erro ao carregar abas: ' + error.message);
+            }
+        }
+
+        function showSheetsSelector() {
+            const sheetsList = document.getElementById('sheetsList') || createSheetsListDiv();
+            
+            // Abas comuns que podem existir
+            const commonSheets = [
+                'XX) Onglet technique - TOTAL',
+                'Sheet1',
+                'Planilha1',
+                'Dados',
+                'Data',
+                'Total',
+                'Resumo'
+            ];
+
+            sheetsList.innerHTML = `
+                <div class="sheets-list">
+                    <strong>Abas disponíveis (selecione ou digite):</strong>
+                    <select id="sheetSelect" class="sheet-select" onchange="updateSheetName()">
+                        <option value="">-- Selecione uma aba --</option>
+                        ${commonSheets.map(sheet => `<option value="${sheet}">${sheet}</option>`).join('')}
+                    </select>
+                    <p><small>Se a aba não estiver na lista, digite o nome exato no campo acima.</small></p>
+                </div>
+            `;
+        }
+
+        function createSheetsListDiv() {
+            const div = document.createElement('div');
+            div.id = 'sheetsList';
+            document.querySelector('.form-group').appendChild(div);
+            return div;
+        }
+
+        function updateSheetName() {
+            const select = document.getElementById('sheetSelect');
+            const input = document.getElementById('sheetName');
+            if (select.value) {
+                input.value = select.value;
+            }
+        }
+
+        async function uploadFile() {
+            if (!selectedFile) {
+                showError('Nenhum arquivo selecionado');
+                return;
+            }
+
+            const sheetName = document.getElementById('sheetName').value.trim();
+            if (!sheetName) {
+                showError('Por favor, digite o nome da aba');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('odsFile', selectedFile);
+            formData.append('sheetName', sheetName);
+
+            // Mostrar progresso
+            document.getElementById('progress').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+
+            try {
+                const response = await fetch('/api/ods/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                // Esconder progresso
+                document.getElementById('progress').style.display = 'none';
+
+                if (result.success) {
+                    displayResults(result);
+                } else {
+                    showError(result.error || 'Erro ao processar arquivo');
+                }
+
+            } catch (error) {
+                document.getElementById('progress').style.display = 'none';
+                showError('Erro de conexão: ' + error.message);
+            }
+        }
+
+        function displayResults(result) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.style.display = 'block';
+
+            // Mostrar resumo
+            const summaryDiv = document.getElementById('summary');
+            let summaryContent = `
+                <div class="summary">
+                    <h3>Resumo do Processamento</h3>
+                    <p><strong>Arquivo:</strong> ${result.originalFileName || 'Arquivo ODS'}</p>
+                    <p><strong>Aba processada:</strong> ${result.sheetName}</p>
+                    <p><strong>Total de linhas:</strong> ${result.rowCount}</p>
+            `;
+
+            if (result.truncated) {
+                summaryContent += `
+                    <p><strong>Atenção:</strong> <span style="color: orange;">⚠️ Dados truncados! Exibindo apenas 1000 de ${result.originalRowCount} linhas.</span></p>
+                    <p><em>${result.message}</em></p>
+                `;
+            } else {
+                summaryContent += `
+                    <p><strong>Status:</strong> <span style="color: green;">✓ Sucesso</span></p>
+                `;
+            }
+
+            summaryContent += '</div>';
+            summaryDiv.innerHTML = summaryContent;
+
+            // Limpar erros
+            const errorsDiv = document.getElementById('errors');
+            errorsDiv.innerHTML = '';
+
+            // Mostrar tabela de dados
+            const dataTableDiv = document.getElementById('dataTable');
+            if (result.data && result.data.length > 0) {
+                const table = createDataTable(result.data);
+                dataTableDiv.innerHTML = table;
+            } else {
+                dataTableDiv.innerHTML = '<p>Nenhum dado encontrado na aba especificada.</p>';
+            }
+        }
+
+        function createDataTable(data) {
+            if (data.length === 0) return '<p>Nenhum dado encontrado.</p>';
+
+            // Usa a primeira linha como cabeçalho
+            const headers = data[0];
+            const dataRows = data.slice(1); // Remove a primeira linha (cabeçalho) dos dados
+
+            let table = '<table class="data-table"><thead><tr>';
+            
+            // Cria os cabeçalhos usando a primeira linha
+            if (Array.isArray(headers)) {
+                headers.forEach(header => {
+                    table += `<th>${header || ''}</th>`;
+                });
+            } else if (typeof headers === 'object') {
+                Object.values(headers).forEach(header => {
+                    table += `<th>${header || ''}</th>`;
+                });
+            } else {
+                table += `<th>${headers || ''}</th>`;
+            }
+            
+            table += '</tr></thead><tbody>';
+
+            // Adiciona as linhas de dados (exceto a primeira que é o cabeçalho)
+            dataRows.forEach(row => {
+                table += '<tr>';
+                
+                if (Array.isArray(row)) {
+                    row.forEach(cell => {
+                        table += `<td>${cell || ''}</td>`;
+                    });
+                } else if (typeof row === 'object') {
+                    Object.values(row).forEach(cell => {
+                        table += `<td>${cell || ''}</td>`;
+                    });
+                } else {
+                    table += `<td>${row || ''}</td>`;
+                }
+                
+                table += '</tr>';
+            });
+
+            table += '</tbody></table>';
+            return table;
+        }
+
+        function showError(message) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.style.display = 'block';
+            document.getElementById('summary').innerHTML = '';
+            document.getElementById('errors').innerHTML = `<div class="error"><h4>Erro:</h4><p>${message}</p></div>`;
+            document.getElementById('dataTable').innerHTML = '';
+        }
+    </script>
+</body>
+</html>

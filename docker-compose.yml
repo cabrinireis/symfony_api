@@ -4,26 +4,26 @@ services:
   app:
     build:
       context: .
-      dockerfile: docker/php/Dockerfile
+      dockerfile: Dockerfile
     container_name: symfony_api_app
     volumes:
       - ./symfony_api:/var/www
     networks:
       - symfony
 
-  db:
-    image: postgres:15
-    container_name: symfony_api_db
-    environment:
-      POSTGRES_DB: symfony_api
-      POSTGRES_USER: symfony
-      POSTGRES_PASSWORD: symfony
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - symfony
+  # db:
+  #   image: postgres:15
+  #   container_name: symfony_api_db
+  #   environment:
+  #     POSTGRES_DB: symfony_api
+  #     POSTGRES_USER: symfony
+  #     POSTGRES_PASSWORD: symfony
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - symfony
 
   web:
     image: nginx:alpine
@@ -38,8 +38,8 @@ services:
     networks:
       - symfony
 
-volumes:
-  postgres_data:
+# volumes:
+#   postgres_data:
 
 networks:
   symfony:
